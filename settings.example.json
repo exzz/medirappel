@@ -1,0 +1,24 @@
+{
+  "reminder_days_before": 1,
+  "send_time": "09:00",
+  "send_deadline": "20:00",
+  "practice": {
+    "name": "Cabinet dentaire du Parc",
+    "address": "12 rue des Lilas, 75000 Paris",
+    "phone": "01 23 45 67 89"
+  },
+  "sms_template": "RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechement, appelez le {phone}.",
+  "excluded_appointment_types": [],
+  "throttle": { "min_delay_s": 60, "max_delay_s": 90 },
+  "retry_delay_minutes": 60,
+  "smsgate": {
+    "url": "http://100.64.0.10:8080",
+    "username": "sms",
+    "password": "changer-moi",
+    "simulation": true,
+    "test_number": null
+  },
+  "cache_ttl_s": { "practitioners": 86400, "calendar": 86400, "appointments": 900 },
+  "timeline": { "past_days": 30, "future_days": 14 },
+  "retention_days": 365
+}

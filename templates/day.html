@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ current_label or 'MediRappel' }} — MediRappel{% endblock %}
+{% block body %}
+{% if pid is none %}
+<main class="wrap"><p class="notice">Aucun praticien n'a de compte dans <code>users.json</code>.</p></main>
+{% else %}
+<nav class="timeline" aria-label="Jours">
+  <ol>
+    {% for d in timeline %}
+    <li><a href="/?day={{ d.iso }}&practitioner={{ pid }}"
+           class="{{ 'closed' if not d.open }} {{ 'today' if d.today }}"
+           {% if d.current %}aria-current="date"{% endif %}
+           title="{{ 'Jour non ouvré' if not d.open else '' }}">
+      <span class="wd">{{ d.label.split(' ')[0] }}</span>
+      <span class="dn">{{ d.day.day }}</span>
+      <span class="mo">{{ d.label.split(' ')[2] }}</span>
+    </a></li>
+    {% endfor %}
+  </ol>
+</nav>
+
+<main class="wrap">
+  <div class="head">
+    <div>
+      <h1>{{ current_label }}</h1>
+      <p class="sub">{% if past %}SMS envoyés pour les rendez-vous de ce jour.{% else %}Rappels prévus pour les rendez-vous de ce jour.{% endif %}</p>
+    </div>
+    {% if user['role'] == 'admin' %}
+    <form method="get" action="/" class="pick">
+      <input type="hidden" name="day" value="{{ current.isoformat() }}">
+      <label for="practitioner">Praticien</label>
+      <select id="practitioner" name="practitioner" onchange="this.form.submit()">
+        {% for p in managed %}<option value="{{ p['practitioner_id'] }}" {{ 'selected' if p['practitioner_id'] == pid }}>{{ p['name'] }}</option>{% endfor %}
+      </select>
+      <noscript><button type="submit">Afficher</button></noscript>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if warning %}<p class="notice bad">{{ warning }}</p>{% endif %}
+
+  {% if not rows %}
+  <p class="empty">{% if past %}Aucun SMS enregistré pour ce jour.{% else %}Aucun rendez-vous patient ce jour-là.{% endif %}</p>
+  {% else %}
+  <table class="sms">
+    <thead><tr><th>RDV</th><th>Patient</th><th>Mobile</th><th>Envoi</th><th>Statut</th><th><span class="sr">Action</span></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    {% set label, tone = status[r['status']] %}
+    <tr class="{{ tone }}">
+      <td class="time">{{ r['appointment_at'][11:] }}</td>
+      <td class="name">{{ r['patient_name'] }}</td>
+      <td class="num phone">{{ mask(r['phone']) }}</td>
+      <td class="num send">{{ (r['sent_at'] or r['send_at'])[8:10] }}/{{ (r['sent_at'] or r['send_at'])[5:7] }} {{ (r['sent_at'] or r['send_at'])[11:] }}</td>
+      <td class="state"><span class="chip {{ tone }}">{{ label }}</span>{% if r['reason'] and r['status'] not in ('sent', 'delivered') %}<span class="why">{{ r['reason'] }}</span>{% endif %}</td>
+      <td class="act">
+        {% if r['status'] == 'planned' %}
+        <form method="post" action="/reminder/{{ r['id'] }}/cancel"><button class="btn ghost-bad">Annuler</button></form>
+        {% elif r['status'] == 'cancelled' and r['send_at'] > now %}
+        <form method="post" action="/reminder/{{ r['id'] }}/restore"><button class="btn ghost">Rétablir</button></form>
+        {% elif r['status'] == 'failed' %}
+        <form method="post" action="/reminder/{{ r['id'] }}/retry"><button class="btn">Relancer</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    <tr class="msg"><td colspan="6"><details><summary>Message</summary><p>{{ r['body'] }}</p></details></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</main>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>document.querySelector('.timeline [aria-current]')?.scrollIntoView({inline: 'center', block: 'nearest'});</script>
+{% endblock %}

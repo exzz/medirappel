@@ -1,0 +1,19 @@
+{
+  "users": [
+    {
+      "login": "antoine-bellec",
+      "name": "Dr Antoine Bellec",
+      "role": "practitioner",
+      "trophy_practitioner_id": 1,
+      "pin_hash": "remplacer: python medirappel.py hash-pin",
+      "pin_salt": "remplacer"
+    },
+    {
+      "login": "secretariat",
+      "name": "Secrétariat",
+      "role": "admin",
+      "pin_hash": "remplacer",
+      "pin_salt": "remplacer"
+    }
+  ]
+}

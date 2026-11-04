@@ -1,0 +1,162 @@
+/* MediRappel. Structure and touch targets from Sterilog; colours from the favicon.
+   System fonts only: the app must work without Internet. */
+
+:root {
+  --primary: #17a673;
+  --primary-dark: #0f6e4d;
+  --accent: #7fe0b0;
+  --primary-light: #e6f6ef;
+  --surface: #f4f6f7;
+  --paper: #ffffff;
+  --ink: #14202a;
+  --muted: #6d7c85;
+  --line: #d5dcdf;
+  --alert: #9e2b16;
+  --alert-light: #f7e7e3;
+  --wait: #8a5a00;
+  --wait-light: #fbf1dc;
+
+  --t-title: 1.6rem;
+  --t-section: 1.2rem;
+  --t-detail: 0.85rem;
+  --r: 10px;
+  --target: 56px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button { touch-action: manipulation; }
+html { -webkit-text-size-adjust: 100%; font-size: 17px; }
+body {
+  margin: 0; font-family: var(--font); line-height: 1.5; color: var(--ink);
+  background: var(--surface); font-variant-numeric: tabular-nums; padding-bottom: 3rem;
+}
+a { color: var(--primary-dark); }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+code { font-size: .9em; }
+
+.wrap { max-width: 64rem; margin: 0 auto; padding: 0 1rem; }
+.wrap.narrow { max-width: 30rem; }
+
+/* ---------------------------------------------------------------- header */
+.bar { background: var(--primary-dark); color: #fff; padding: .75rem 0; }
+.bar .wrap { display: flex; align-items: center; gap: .75rem; }
+.brand { color: #fff; text-decoration: none; font-weight: 650; font-size: var(--t-section);
+         display: inline-flex; align-items: center; gap: .45rem; }
+.brand img { background: #fff; border-radius: 6px; }
+.who { margin-left: auto; font-size: var(--t-detail); opacity: .9; min-width: 0;
+       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout { margin: 0; flex-shrink: 0; }
+.logout button { min-height: 2.75rem; padding: .3rem .7rem; font: inherit; font-size: var(--t-detail);
+                 color: #fff; background: transparent; border: 1px solid rgba(255,255,255,.6);
+                 border-radius: var(--r); cursor: pointer; }
+
+h1 { font-size: var(--t-title); line-height: 1.2; margin: 0 0 .25rem; }
+.sub { color: var(--muted); margin: 0 0 1.25rem; }
+
+/* -------------------------------------------------------------- timeline
+   The one strong element: a strip of days, like an appointment book's edge.
+   Closed days are hatched, today underlined, the chosen day filled. */
+.timeline { background: var(--paper); border-bottom: 1px solid var(--line); margin-bottom: 1.5rem;
+            overflow-x: auto; scrollbar-width: thin; }
+.timeline ol { display: flex; list-style: none; margin: 0 auto; padding: .6rem 1rem; gap: 4px; width: max-content; }
+.timeline a {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 3.4rem; min-height: 4.6rem; border-radius: var(--r); text-decoration: none;
+  color: var(--ink); border: 1px solid transparent; position: relative;
+}
+.timeline a:hover { background: var(--primary-light); }
+.timeline .wd, .timeline .mo { font-size: var(--t-detail); color: var(--muted); line-height: 1.2; }
+.timeline .dn { font-size: 1.35rem; font-weight: 650; line-height: 1.2; }
+.timeline a.closed {
+  color: var(--muted);
+  background: repeating-linear-gradient(135deg, var(--surface) 0 6px, #e8ecee 6px 12px);
+}
+.timeline a.today::after {
+  content: ""; position: absolute; left: 25%; right: 25%; bottom: 5px;
+  height: 3px; border-radius: 2px; background: var(--primary);
+}
+.timeline a[aria-current] { background: var(--primary-dark); color: #fff; }
+.timeline a[aria-current] .wd, .timeline a[aria-current] .mo { color: var(--accent); }
+.timeline a[aria-current].today::after { background: var(--accent); }
+
+/* ------------------------------------------------------------------ page */
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.head h1::first-letter { text-transform: uppercase; }
+.pick { display: flex; align-items: center; gap: .5rem; }
+.pick label { color: var(--muted); font-size: var(--t-detail); }
+select { min-height: var(--target); font: inherit; padding: 0 .75rem; border: 1px solid var(--line);
+         border-radius: var(--r); background: var(--paper); color: var(--ink); }
+
+.notice { border-radius: var(--r); padding: .8rem .9rem; margin: 0 0 1rem;
+          background: var(--primary-light); color: var(--primary-dark); }
+.notice.bad { background: var(--alert-light); color: var(--alert); }
+.empty { color: var(--muted); padding: 2rem 0; }
+
+/* ----------------------------------------------------------------- table */
+.sms { width: 100%; border-collapse: collapse; background: var(--paper);
+       border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.sms th { text-align: left; font-size: var(--t-detail); font-weight: 600; color: var(--muted);
+          padding: .6rem .75rem; border-bottom: 1px solid var(--line); }
+.sms td { padding: .55rem .75rem; vertical-align: middle; }
+.sms tr:not(.msg) td { border-top: 1px solid var(--line); }
+.sms .time { font-weight: 650; font-size: 1.05rem; }
+.sms .num { white-space: nowrap; }
+.sms tr.neutral td:not(.act) { color: var(--muted); }
+.sms .msg td { padding-top: 0; }
+.sms details summary { cursor: pointer; color: var(--primary-dark); font-size: var(--t-detail); width: max-content; }
+.sms details p { margin: .35rem 0 .2rem; padding: .6rem .8rem; background: var(--primary-light);
+                 border-radius: var(--r) var(--r) var(--r) 2px; max-width: 40rem; }
+.sms .act { text-align: right; width: 1%; white-space: nowrap; }
+.sms .act form { margin: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.chip { display: inline-block; padding: .1rem .55rem; border-radius: 99px; font-size: var(--t-detail);
+        font-weight: 600; white-space: nowrap; }
+.chip.good { background: var(--primary-light); color: var(--primary-dark); }
+.chip.wait { background: var(--wait-light); color: var(--wait); }
+.chip.bad { background: var(--alert-light); color: var(--alert); }
+.chip.neutral { background: var(--surface); color: var(--muted); }
+.why { display: block; font-size: var(--t-detail); color: var(--muted); }
+
+.btn { min-height: var(--target); padding: .3rem 1.1rem; font: inherit; font-weight: 600; cursor: pointer;
+       color: #fff; background: var(--primary-dark); border: 1px solid var(--primary-dark); border-radius: var(--r); }
+.btn.ghost { color: var(--primary-dark); background: var(--paper); }
+.btn.ghost-bad { color: var(--alert); background: var(--paper); border-color: var(--alert); }
+
+/* Phone: one block per appointment instead of a table. */
+@media (max-width: 700px) {
+  .who { display: none; }
+  .logout { margin-left: auto; }
+  .sms thead { display: none; }
+  .sms, .sms tbody, .sms tr, .sms td { display: block; }
+  .sms tr:not(.msg) {
+    display: grid; gap: .15rem .75rem; padding: .7rem .75rem 0; border-top: 1px solid var(--line);
+    grid-template-columns: 3.4rem 1fr auto;
+    grid-template-areas: "time name act" ". phone act" ". send act" ". state act";
+  }
+  .sms tr:not(.msg) td { border: 0; padding: 0; }
+  .sms .time { grid-area: time; }
+  .sms .name { grid-area: name; font-weight: 600; }
+  .sms .phone { grid-area: phone; font-size: var(--t-detail); }
+  .sms .send { grid-area: send; font-size: var(--t-detail); color: var(--muted); }
+  .sms .send::before { content: "Envoi "; }
+  .sms .state { grid-area: state; }
+  .sms .act { grid-area: act; align-self: center; width: auto; }
+  .sms .msg td { padding: .3rem .75rem .7rem 4.9rem; }
+}
+
+/* ------------------------------------------------------------ PIN pad */
+.accounts { display: grid; gap: .5rem; margin-bottom: 1.5rem; }
+.account { min-height: var(--target); padding: .6rem .9rem; font: inherit; text-align: left; cursor: pointer;
+           background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); color: var(--ink); }
+.account[aria-pressed="true"] { border-color: var(--primary-dark); background: var(--primary-light); }
+.dots { display: flex; justify-content: center; gap: .7rem; margin: 1.5rem 0; }
+.dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
+.dot.on { background: var(--primary-dark); border-color: var(--primary-dark); }
+.pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; }
+.pad button { min-height: 4rem; font: inherit; font-size: 1.5rem; cursor: pointer; color: var(--ink);
+              background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); }
+.pad button:active { background: var(--primary-light); }
+.pad .fn { font-size: 1rem; font-weight: 600; color: var(--muted); }

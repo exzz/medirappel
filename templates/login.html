@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Connexion — MediRappel{% endblock %}
+{% block body %}
+<main class="wrap narrow">
+  <h1>Connexion</h1>
+  <p class="sub">Choisissez votre nom, puis composez votre code.</p>
+  {% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
+  {% if not accounts %}<p class="notice">Aucun compte. Renseignez <code>users.json</code>, puis redémarrez l'application.</p>{% endif %}
+  <form method="post" action="/login" id="form">
+    <div class="accounts">
+      {% for a in accounts %}
+      <button type="button" class="account" data-id="{{ a['id'] }}" aria-pressed="false">{{ a['name'] }}</button>
+      {% endfor %}
+    </div>
+    <div id="pin-step" hidden>
+      <p class="sub" id="prompt"></p>
+      <div class="dots" aria-hidden="true">{% for i in range(6) %}<span class="dot"></span>{% endfor %}</div>
+      <div class="pad">
+        {% for n in '123456789' %}<button type="button" data-digit="{{ n }}">{{ n }}</button>{% endfor %}
+        <button type="button" class="fn" id="change">Changer</button>
+        <button type="button" data-digit="0">0</button>
+        <button type="button" class="fn" id="erase">Effacer</button>
+      </div>
+    </div>
+    <input type="hidden" name="user_id" id="user_id">
+    <input type="hidden" name="pin" id="pin">
+  </form>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+const step = document.getElementById('pin-step');
+const dots = [...document.querySelectorAll('.dot')];
+let code = '';
+const draw = () => dots.forEach((d, i) => d.classList.toggle('on', i < code.length));
+document.querySelectorAll('.account').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.account').forEach(x => x.setAttribute('aria-pressed', 'false'));
+  b.setAttribute('aria-pressed', 'true');
+  document.getElementById('user_id').value = b.dataset.id;
+  document.getElementById('prompt').textContent = 'Code de ' + b.textContent;
+  step.hidden = false; code = ''; draw();
+}));
+document.querySelectorAll('[data-digit]').forEach(k => k.addEventListener('click', () => {
+  if (code.length >= 6) return;
+  code += k.dataset.digit; draw();
+  if (code.length === 6) { document.getElementById('pin').value = code; document.getElementById('form').submit(); }
+}));
+document.getElementById('erase').addEventListener('click', () => { code = code.slice(0, -1); draw(); });
+document.getElementById('change').addEventListener('click', () => {
+  code = ''; draw(); step.hidden = true;
+  document.querySelectorAll('.account').forEach(x => x.setAttribute('aria-pressed', 'false'));
+});
+</script>
+{% endblock %}
