@@ -20,8 +20,8 @@ décision marquée « décision de l'utilisateur » ne se rediscute pas sans lui
 4. Offrir aux praticiens une interface web (connexion par PIN) pour consulter les
    SMS envoyés, la planification à venir, et annuler un envoi.
 
-Hors périmètre pour l'instant (voir §10) : réponses des patients, opposition
-gérée dans MediRappel, plusieurs rappels par rendez-vous.
+Hors périmètre pour l'instant (voir §10) : réponses des patients (STOP),
+plusieurs rappels par rendez-vous.
 
 ---
 
@@ -50,15 +50,26 @@ Un rendez-vous reçoit un rappel si **toutes** ces conditions sont vraies :
   `users.json` (lien par `trophy_practitioner_id`). Un praticien continue
   d'utiliser le module SMS intégré à Trophy : il n'a pas de compte, donc il n'est
   jamais traité, ce qui évite les doublons. Les champs SMS de Trophy (`RAPPELSMS`,
-  `IDSMS`, tables `SMS*`) sont **ignorés** : on fait comme si ce module n'existait pas ;
+  `IDSMS`, tables `SMS*`, et `Patients.SMSACTIF`) sont **ignorés** : on fait comme si ce
+  module n'existait pas. `SMSACTIF` suit l'âge de la fiche (case cochée par défaut
+  depuis ~2012), pas le choix du patient (analyse du 2026-11-04, décision de l'utilisateur) ;
 - il a un patient (les créneaux sans patient, pause ou bloc, sont ignorés) ;
+- il n'est pas coché **« RDV manqué »** (`Agenda.PASVENU`, `absent` dans l'API). Un tel
+  rendez-vous est **ignoré sans même apparaître** dans le tableau ; sa ligne non envoyée
+  est supprimée à la relecture. Un SMS déjà parti reste affiché avec son statut
+  (décision de l'utilisateur) ;
 - son type n'est pas dans `excluded_appointment_types` (`settings.json`). La liste
   des types vient de `TypeRDV` (21 types) et reste à remplir avec l'utilisateur ;
-- le patient accepte les SMS (`Patients.SMSACTIF`, exposé par l'API) ;
-- le patient a un **mobile français** (voir plus bas). Sinon, aucun rappel.
+- le patient a un **mobile français** (voir plus bas). Sinon, aucun rappel ;
+- le patient n'est pas dans la **liste d'exclusion locale** (table `optout`, identifiant
+  Trophy seulement). Bouton gris **« Exclure »**, de la taille d'une pastille de statut, dans sa colonne juste
+  après le nom du patient (sans confirmation),
+  **« Réactiver »** pour annuler. La liste est propre au patient, pas au praticien ; l'exclusion stoppe
+  aussitôt ses SMS planifiés ou annulés (motif « Refus SMS »), sans attendre la
+  relecture. Journalisé `patient.exclude|include`. Jamais purgée (décision de l'utilisateur).
 
 Les rendez-vous écartés apparaissent quand même dans le tableau, avec leur motif
-(« pas de mobile », « refus SMS », « type exclu »), pour que le praticien comprenne
+(« pas de mobile », « type exclu »), pour que le praticien comprenne
 pourquoi un patient ne sera pas prévenu.
 
 ### Numéro de mobile
@@ -79,7 +90,10 @@ rien.
   pas férié.
 - Heure d'envoi : `send_time` (`"09:00"` par défaut).
 - Si l'heure d'envoi est **déjà passée** quand le rendez-vous est découvert (rendez-vous
-  pris tard), **aucun SMS** n'est envoyé. Ligne visible, motif « pris trop tard ».
+  pris tard), **aucun SMS automatique**. Ligne visible, motif « rendez-vous pris après
+  l'envoi automatique programmé », avec un bouton **« Envoyer maintenant »** (demande de
+  l'utilisateur) : envoi immédiat, **une seule fois**, après relecture de l'agenda du jour,
+  sans nouvelle tentative automatique (un échec passe `failed`). Journalisé `reminder.send_now`.
 - Deux rendez-vous du même patient le même jour : **deux SMS**.
 - Si le service était arrêté à l'heure d'envoi, il rattrape les envois du jour au
   redémarrage, jusqu'à `send_deadline` (`"20:00"`). Après, les SMS passent `missed`.
@@ -96,9 +110,9 @@ rien.
   chaque jour pour la fenêtre `aujourd'hui … aujourd'hui + N + marge`.
 - Rendez-vous déplacé : le SMS planifié est recalculé (date, heure, texte). Rendez-vous
   disparu de l'agenda : le SMS passe `voided` (motif « rendez-vous supprimé »).
-  **À vérifier** : on ne sait pas encore comment Trophy marque une annulation
-  (suppression, ou déplacement vers `Agenda_Archive`). Il n'existe pas de statut
-  « annulé » ; `PASVENU` signale une absence, pas une annulation.
+  Un rendez-vous annulé **disparaît simplement du planning** Trophy (constat de
+  l'utilisateur, 2026-11-04). Un rendez-vous coché « RDV manqué » (`PASVENU`) est
+  ignoré (voir plus haut) ; le secrétariat coche parfois la case à l'avance.
 - **Jours passés** : jamais d'appel à Trophy. On affiche ce qui est en base.
 
 ### Débit d'envoi
@@ -116,7 +130,7 @@ Si l'envoi échoue (téléphone injoignable, statut `Failed`), **une seule nouve
 tentative**, `retry_delay_minutes` plus tard (60). Si elle échoue aussi, le SMS passe
 `failed`. Une erreur est écrite dans les logs et la ligne affiche
 **« Échec envoi »** dans l'interface. Le praticien peut relancer à la main un SMS
-`failed` (seul envoi manuel possible).
+`failed` (avec « Envoyer maintenant », seuls envois manuels possibles).
 
 ---
 
@@ -162,7 +176,7 @@ Endpoints utilisés : `/practitioners` (avec `horaires`, 7 jours ISO, 1 = lundi)
 patient joint porte `mobile`, `tel`, `sms_actif` : aucun appel `/patients`).
 Un créneau sans patient (pause, plage bloquée) est ignoré. Le nom du praticien
 dans le SMS est le `name` de `users.json`, pas le `NOM_PRENOM` de Trophy.
-**Toujours inconnu** : comment Trophy marque un rendez-vous annulé (voir §3).
+Rendez-vous annulé : supprimé de l'agenda. « RDV manqué » : `absent` (`PASVENU`), voir §3.
 
 ---
 
@@ -236,7 +250,7 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   de patient ni de numéro : seulement les identifiants.
 - RGPD : une ligne au registre des traitements du cabinet (finalité : rappel de
   rendez-vous ; base : art. 9.2.h). Le patient est informé au cabinet. Le refus
-  passe aujourd'hui par `SMSACTIF` dans Trophy.
+  passe par la liste d'exclusion locale de MediRappel (§3).
 
 ---
 
@@ -249,7 +263,13 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   Reprendre `app/auth.py` de Sterilog.
 - Rôle `practitioner` : lié à son `trophy_practitioner_id`, il ne voit **que ses
   rendez-vous**.
+- Rôle `assistant` (assistante) : `trophy_practitioner_ids`, liste d'identifiants Trophy.
+  Elle voit les plannings de ces praticiens (s'ils ont un compte), avec un sélecteur, et
+  a pour l'instant les mêmes droits qu'un praticien (annuler, rétablir, relancer, envoyer
+  maintenant, exclure). Le SMS porte toujours le nom du **praticien** (`name` de son
+  compte), jamais celui de l'assistante. Elle ne compte pas comme praticien géré.
 - Rôle `admin` : voit tous les praticiens gérés, avec un sélecteur de praticien.
+- Base créée avant ce rôle : `init_db` reconstruit la table `user` (identifiants conservés).
 
 ### Écran principal
 
@@ -263,15 +283,30 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   le texte.
 - **Jour futur** : relecture de l'agenda (§3), puis tableau de la planification :
   heure du rendez-vous, patient, date et heure d'envoi prévues, statut, texte du
-  message (dépliable), et un **bouton « Annuler »** sur la ligne.
+  le texte du message dans une colonne « Message » après la date d'envoi, replié
+  (« ▸ Message », un clic le déplie dans la cellule), et un **bouton
+  « Annuler »** en fin de ligne.
 - **Aujourd'hui** est un jour mixte : envoyés et planifiés dans le même tableau.
 - **Annuler** porte sur ce seul SMS. C'est réversible par **« Rétablir »** tant que
   l'heure d'envoi n'est pas passée. Pas de motif demandé. Les deux actes sont
   journalisés.
-- Pas d'édition du texte, pas d'envoi immédiat, pas d'ajout manuel. Seule action
-  en plus : **« Relancer »** sur un SMS `failed`.
-- Utilisable sur le poste du cabinet et sur téléphone (responsive, cibles
-  tactiles de 56 px comme dans Sterilog).
+- Pas d'édition du texte, pas d'ajout manuel. Actions en plus :
+  **« Relancer »** sur un SMS `failed`, **« Envoyer maintenant »** sur un SMS pris après
+  l'envoi automatique (§3).
+- Bouton **« Recharger le planning »** (jours non passés, demande de l'utilisateur) :
+  relit dans Trophy, sans cache, tout l'agenda à venir du praticien affiché
+  (aujourd'hui … aujourd'hui + horizon), avec les mêmes règles qu'une page.
+  Journalisé (`planning.refresh`).
+- Bouton **« Envoyer un message »** (à côté de « Recharger le planning », demande de
+  l'utilisateur) : page `/message`, SMS libre vers un mobile français, envoyé tout de suite
+  par SMSGate (simulation et numéro de test respectés), accents retirés, 160 caractères
+  au plus. Ni le numéro ni le texte ne sont stockés : journal `message.send` (longueur,
+  identifiant SMSGate), log avec numéro masqué. Pas de suivi de livraison. Tous les rôles.
+- Utilisable sur le poste du cabinet et sur téléphone (responsive). Contenu sur toute la largeur
+  de l'écran ; sous 1100 px, le tableau devient une liste de blocs (il ne tient plus). Lignes compactes
+  (demande de l'utilisateur) : boutons d'environ 36 px de haut, et non 56 px comme dans
+  Sterilog ; tout le tableau dans la taille de la pastille de statut. En fin de ligne, un seul
+  bouton d'action (Annuler, Rétablir, Envoyer maintenant ou Relancer).
 
 ### Design
 
@@ -296,14 +331,14 @@ viennent du favicon `static/icon-medirappel.png`, vert émeraude :
 téléphone) → `sent` → `delivered`. Échec : retour à `planned` une heure plus tard,
 puis `failed`. « Relancer » remet un `failed` en `planned` pour un seul essai.
 `cancelled` : annulé à la main, réversible. `skipped` : jamais envoyé, avec un motif
-(`pas de mobile`, `refus SMS`, `type exclu`, `pris trop tard`). `voided` : rendez-vous
+(`pas de mobile`, `type exclu`, `Refus SMS`, pris après l'envoi automatique). `voided` : rendez-vous
 disparu de l'agenda, ou praticien sans compte. `missed` : heure d'envoi dépassée
 pendant un arrêt. Un service tué pendant `sending` repart en `failed` (« envoi
 interrompu ») : jamais de double envoi. Lignes supprimées seulement par la rétention.
 
-Règle « pris trop tard » : une page passe `late_before = maintenant`,
+Règle « pris après l'envoi automatique » (`planner.LATE`) : une page passe `late_before = maintenant`,
 l'ordonnanceur passe l'heure d'envoi du jour. Le lot du matin envoie donc ce qu'il
-découvre à 9 h. Une fois `pris trop tard`, une ligne le reste tant que son heure
+découvre à 9 h. Une fois marquée ainsi, une ligne le reste tant que son heure
 d'envoi ne change pas.
 
 ---
@@ -339,7 +374,7 @@ app/smsgate.py     client SMSGate, mode simulation, numéro de test
 app/scheduler.py   boucles asyncio : planification quotidienne, envois temporisés, suivi des statuts, purge
 app/auth.py        PIN, sessions, comptes (repris de Sterilog)
 app/journal.py     journal d'audit chaîné (repris de Sterilog)
-app/main.py        routes : /login, /logout, / (jour), /reminder/{id}/cancel|restore|retry
+app/main.py        routes : /login, /logout, / (jour), /refresh, /message, /reminder/{id}/cancel|restore|retry|send|exclude|include
 templates/ static/
 medirappel.py      ligne de commande : hash-pin (pour users.json), verify (journal)
 tests/             faux Trophy (httpx.MockTransport), horloge figée, SMSGate en simulation
@@ -348,7 +383,7 @@ tests/             faux Trophy (httpx.MockTransport), horloge figée, SMSGate en
 Lancer : `uv run uvicorn app.main:app` (un seul processus). Tests : `uv run pytest`.
 `MEDIRAPPEL_NO_SCHEDULER=1` coupe l'ordonnanceur (tests).
 
-Tables : `user`, `session`, `api_cache`, `reminder` (un SMS par rendez-vous Trophy),
+Tables : `user`, `session`, `api_cache`, `reminder`, `optout` (un SMS par rendez-vous Trophy),
 `journal`. Heures locales `AAAA-MM-JJTHH:MM` dans `reminder`, UTC dans `journal`.
 
 Déploiement (**pas encore écrit**) : comme Sterilog (`../sterilog/deploy/`). Image Docker, `TZ=Europe/Paris`,
@@ -366,8 +401,9 @@ processus, sur le serveur du cabinet.
   à une offre pro.
 - **Limite Android** de 30 SMS / 30 min : la temporisation la respecte. Ne pas
   descendre `min_delay_s` sous 60 s sans vérifier le téléphone.
-- **Annulation dans Trophy** : signal encore inconnu (§3). Tant que ce n'est pas
-  établi, un rendez-vous annulé pourrait recevoir un rappel.
+- **Annulation dans Trophy** : suppression du rendez-vous (§3). Une annulation faite
+  après le dernier passage de l'ordonnanceur, pendant un lot d'envoi, peut encore
+  recevoir son rappel.
 - **Praticien sous le module SMS de Trophy** : il est exclu seulement parce qu'il
   n'a pas de compte. Lui créer un compte provoquerait des doublons.
 - **Secrets** : `trophy-api.json`, les identifiants SMSGate et `users.json` ne
@@ -377,7 +413,7 @@ processus, sur le serveur du cabinet.
 
 ### Fonctionnalités futures
 
-- Opposition aux SMS gérée dans MediRappel (réponse STOP, liste locale).
+- Réponse STOP des patients (SMS entrants) alimentant la liste d'exclusion.
 - Lecture des réponses des patients (SMS entrants).
 - Plusieurs rappels par rendez-vous (J-2 et J-1).
 - Fermetures exceptionnelles (blocs de fermeture dans l'agenda, `ID_COUL_FERMETURE`).

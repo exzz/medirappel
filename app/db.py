@@ -19,8 +19,9 @@ CREATE TABLE IF NOT EXISTS user (
     id              INTEGER PRIMARY KEY,
     login           TEXT    NOT NULL UNIQUE,
     name            TEXT    NOT NULL,
-    role            TEXT    NOT NULL CHECK (role IN ('practitioner', 'admin')),
-    practitioner_id INTEGER,              -- Trophy NUM_PRATICIEN
+    role            TEXT    NOT NULL CHECK (role IN ('practitioner', 'assistant', 'admin')),
+    practitioner_id INTEGER,              -- Trophy NUM_PRATICIEN (practitioner)
+    practitioner_ids TEXT,                -- JSON list of NUM_PRATICIEN (assistant)
     pin_hash        TEXT    NOT NULL,
     pin_salt        TEXT    NOT NULL,
     active          INTEGER NOT NULL DEFAULT 1,
@@ -67,6 +68,13 @@ CREATE TABLE IF NOT EXISTS reminder (
 CREATE INDEX IF NOT EXISTS idx_reminder_day ON reminder(practitioner_id, appointment_at);
 CREATE INDEX IF NOT EXISTS idx_reminder_status ON reminder(status, send_at);
 
+-- Patients who no longer want SMS (CLAUDE.md §3). Trophy id only, no name.
+CREATE TABLE IF NOT EXISTS optout (
+    patient_id      INTEGER PRIMARY KEY,
+    user_id         INTEGER NOT NULL,
+    created_at      TEXT    NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS journal (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp       TEXT    NOT NULL,
@@ -92,6 +100,16 @@ def connect() -> sqlite3.Connection:
 def init_db() -> None:
     conn = connect()
     try:
+        old = conn.execute("SELECT sql FROM sqlite_master WHERE name = 'user'").fetchone()
+        if old and "practitioner_ids" not in old[0]:
+            # Pre-assistant schema: SQLite cannot alter a CHECK, rebuild the table (ids kept).
+            create = SCHEMA[SCHEMA.index("CREATE TABLE IF NOT EXISTS user ("):SCHEMA.index(");") + 2]
+            conn.executescript("PRAGMA foreign_keys = OFF; BEGIN;"
+                               + create.replace("IF NOT EXISTS user (", "user_new (")
+                               + "INSERT INTO user_new (id, login, name, role, practitioner_id, pin_hash, pin_salt,"
+                               " active, attempts, locked_until) SELECT id, login, name, role, practitioner_id,"
+                               " pin_hash, pin_salt, active, attempts, locked_until FROM user;"
+                               " DROP TABLE user; ALTER TABLE user_new RENAME TO user; COMMIT;")
         conn.executescript(SCHEMA)
     finally:
         conn.close()

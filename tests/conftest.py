@@ -34,7 +34,8 @@ class FakeTrophy:
             q = request.url.params
             day = lambda a: a["debut"][:10]  # noqa: E731
             return httpx.Response(200, json=[a for a in self.appointments
-                                             if q["from"] <= day(a) <= q["to"]])
+                                             if q["from"] <= day(a) <= q["to"]
+                                             and str(a.get("praticien_id", q["practitioner"])) == q["practitioner"]])
         return httpx.Response(404)
 
 
@@ -60,6 +61,8 @@ def env(tmp_path, monkeypatch, clock):
         {"login": "bellec", "name": "Dr Bellec", "role": "practitioner", "trophy_practitioner_id": 1,
          "pin_hash": pin_hash, "pin_salt": salt},
         {"login": "other", "name": "Dr Autre", "role": "practitioner", "trophy_practitioner_id": 2,
+         "pin_hash": pin_hash, "pin_salt": salt},
+        {"login": "assist", "name": "Assistante", "role": "assistant", "trophy_practitioner_ids": [2],
          "pin_hash": pin_hash, "pin_salt": salt},
     ]}
     for name, data in (("settings.json", settings), ("users.json", users),

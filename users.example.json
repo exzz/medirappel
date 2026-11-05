@@ -9,6 +9,14 @@
       "pin_salt": "remplacer"
     },
     {
+      "login": "assistante-julie",
+      "name": "Julie (assistante)",
+      "role": "assistant",
+      "trophy_practitioner_ids": [1, 2],
+      "pin_hash": "remplacer",
+      "pin_salt": "remplacer"
+    },
+    {
       "login": "secretariat",
       "name": "Secrétariat",
       "role": "admin",

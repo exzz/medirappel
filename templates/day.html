@@ -25,7 +25,16 @@
       <h1>{{ current_label }}</h1>
       <p class="sub">{% if past %}SMS envoyés pour les rendez-vous de ce jour.{% else %}Rappels prévus pour les rendez-vous de ce jour.{% endif %}</p>
     </div>
-    {% if user['role'] == 'admin' %}
+    <div class="tools">
+    {% if not past %}
+    <form method="post" action="/refresh">
+      <input type="hidden" name="day" value="{{ current.isoformat() }}">
+      <input type="hidden" name="practitioner" value="{{ pid }}">
+      <button class="btn ghost" title="Relire dans le logiciel du cabinet tous les rendez-vous à venir">Recharger le planning</button>
+    </form>
+    {% endif %}
+    <a class="btn ghost" href="/message">Envoyer un message</a>
+    {% if user['role'] != 'practitioner' %}
     <form method="get" action="/" class="pick">
       <input type="hidden" name="day" value="{{ current.isoformat() }}">
       <label for="practitioner">Praticien</label>
@@ -35,35 +44,48 @@
       <noscript><button type="submit">Afficher</button></noscript>
     </form>
     {% endif %}
+    </div>
   </div>
 
   {% if warning %}<p class="notice bad">{{ warning }}</p>{% endif %}
+  {% if refreshed %}<p class="notice">Planning à venir rechargé depuis le logiciel du cabinet.</p>{% endif %}
 
   {% if not rows %}
   <p class="empty">{% if past %}Aucun SMS enregistré pour ce jour.{% else %}Aucun rendez-vous patient ce jour-là.{% endif %}</p>
   {% else %}
   <table class="sms">
-    <thead><tr><th>RDV</th><th>Patient</th><th>Mobile</th><th>Envoi</th><th>Statut</th><th><span class="sr">Action</span></th></tr></thead>
+    <thead><tr><th>RDV</th><th>Patient</th><th>Envoi SMS</th><th>Mobile</th><th>Envoi</th><th>Message</th><th>Statut</th><th><span class="sr">Action</span></th></tr></thead>
     <tbody>
     {% for r in rows %}
     {% set label, tone = status[r['status']] %}
+    {# These reasons replace « Non envoyé » in the chip (user request). #}
+    {% set in_chip = r['status'] == 'skipped' and r['reason'] in (excluded, 'pas de mobile') %}
+    {% if in_chip %}{% set label = r['reason'][0]|upper ~ r['reason'][1:] %}{% endif %}
     <tr class="{{ tone }}">
       <td class="time">{{ r['appointment_at'][11:] }}</td>
       <td class="name">{{ r['patient_name'] }}</td>
-      <td class="num phone">{{ mask(r['phone']) }}</td>
+      <td class="excl">
+        {% if r['patient_id'] in optout %}
+        <form method="post" action="/reminder/{{ r['id'] }}/include"><button class="chip-btn" title="Ce patient recevra de nouveau les rappels">Réactiver</button></form>
+        {% else %}
+        <form method="post" action="/reminder/{{ r['id'] }}/exclude"><button class="chip-btn" title="Ce patient ne veut plus de SMS">Exclure</button></form>
+        {% endif %}
+      </td>      <td class="num phone">{{ mask(r['phone']) }}</td>
       <td class="num send">{{ (r['sent_at'] or r['send_at'])[8:10] }}/{{ (r['sent_at'] or r['send_at'])[5:7] }} {{ (r['sent_at'] or r['send_at'])[11:] }}</td>
-      <td class="state"><span class="chip {{ tone }}">{{ label }}</span>{% if r['reason'] and r['status'] not in ('sent', 'delivered') %}<span class="why">{{ r['reason'] }}</span>{% endif %}</td>
+      <td class="text"><details><summary>Message</summary>{{ r['body'] }}</details></td>
+      <td class="state"><span class="chip {{ tone }}">{{ label }}</span>{% if r['reason'] and not in_chip and r['status'] not in ('sent', 'delivered') %}<span class="why">{{ r['reason'] }}</span>{% endif %}</td>
       <td class="act">
         {% if r['status'] == 'planned' %}
         <form method="post" action="/reminder/{{ r['id'] }}/cancel"><button class="btn ghost-bad">Annuler</button></form>
         {% elif r['status'] == 'cancelled' and r['send_at'] > now %}
         <form method="post" action="/reminder/{{ r['id'] }}/restore"><button class="btn ghost">Rétablir</button></form>
+        {% elif r['status'] == 'skipped' and r['reason'] == late and r['appointment_at'] > now %}
+        <form method="post" action="/reminder/{{ r['id'] }}/send"><button class="btn">Envoyer maintenant</button></form>
         {% elif r['status'] == 'failed' %}
         <form method="post" action="/reminder/{{ r['id'] }}/retry"><button class="btn">Relancer</button></form>
         {% endif %}
       </td>
     </tr>
-    <tr class="msg"><td colspan="6"><details><summary>Message</summary><p>{{ r['body'] }}</p></details></td></tr>
     {% endfor %}
     </tbody>
   </table>

@@ -15,6 +15,9 @@ log = logging.getLogger(__name__)
 
 # Statuses the planner never touches again: the SMS is in flight or done.
 LOCKED = ("sending", "submitted", "sent", "delivered", "failed", "missed")
+# Shown as is in the page; also the marker of the "taken too late" rule.
+LATE = "RDV pris après l'envoi auto"
+EXCLUDED = "Refus SMS"
 
 DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 MONTHS = ["janvier", "fevrier", "mars", "avril", "mai", "juin", "juillet", "aout",
@@ -115,6 +118,8 @@ async def sync(conn: sqlite3.Connection, practitioner_id: int, practitioner_name
     is_open = await calendar(practitioner_id)
     stamp = iso(now())
     seen = []
+    absent = 0
+    optout = {r[0] for r in conn.execute("SELECT patient_id FROM optout")}
     for a in appts:
         pat = a.get("patient")
         if not pat or not a.get("debut"):
@@ -122,28 +127,33 @@ async def sync(conn: sqlite3.Connection, practitioner_id: int, practitioner_name
         at = datetime.fromisoformat(a["debut"])
         send = send_time_for(at.date(), is_open)
         phone = french_mobile(pat.get("mobile")) or french_mobile(pat.get("tel"))
-        if (a.get("type") or "").strip().lower() in s["excluded_appointment_types"]:
+        if pat["id"] in optout:
+            status, reason = "skipped", EXCLUDED
+        elif (a.get("type") or "").strip().lower() in s["excluded_appointment_types"]:
             status, reason = "skipped", "type exclu"
-        elif not pat.get("sms_actif"):
-            status, reason = "skipped", "refus SMS"
+        # Patients.SMSACTIF is ignored: it reflects file age, not consent (CLAUDE.md §3).
         elif not phone:
             status, reason = "skipped", "pas de mobile"
         else:
             status, reason = "planned", None
 
-        old = conn.execute("SELECT status, reason, send_at FROM reminder WHERE appointment_id = ?",
+        old = conn.execute("SELECT status, reason, send_at, attempts FROM reminder WHERE appointment_id = ?",
                            (a["id"],)).fetchone()
         seen.append(a["id"])
-        if old and old["status"] in LOCKED:
+        if a.get("absent"):  # « RDV manqué » ticked: no SMS, not even listed; a sent SMS stays (user decision)
+            absent += conn.execute("DELETE FROM reminder WHERE appointment_id = ? AND status IN"
+                                   " ('planned', 'skipped', 'cancelled', 'voided')", (a["id"],)).rowcount
+            continue
+        if old and (old["status"] in LOCKED or old["attempts"]):  # a retry keeps its send time
             continue
         if status == "planned" and old and old["status"] == "cancelled":
             status = "cancelled"
         same_send = old and old["send_at"] == iso(send)
         if status == "planned" and (
-            (same_send and old["reason"] == "pris trop tard")  # once too late, stays so
+            (same_send and old["reason"] == LATE)  # once too late, stays so
             or (send < late_before and not (same_send and old["status"] == "planned"))
         ):
-            status, reason = "skipped", "pris trop tard"
+            status, reason = "skipped", LATE
 
         conn.execute(
             """INSERT INTO reminder (appointment_id, practitioner_id, patient_id, patient_name,
@@ -167,8 +177,8 @@ async def sync(conn: sqlite3.Connection, practitioner_id: int, practitioner_name
               AND status IN ('planned', 'skipped', 'cancelled') AND appointment_id NOT IN ({marks})""",
         [stamp, practitioner_id, start.isoformat(), end.isoformat() + "T23:59", *seen],
     ).rowcount
-    log.info("agenda sync practitioner=%s %s..%s: %d appointments, %d voided (gone from agenda)",
-             practitioner_id, start, end, len(seen), gone)
+    log.info("agenda sync practitioner=%s %s..%s: %d appointments, %d voided (gone from agenda),"
+             " %d dropped (marked missed)", practitioner_id, start, end, len(seen), gone, absent)
 
 
 def managed_practitioners(conn: sqlite3.Connection) -> list[sqlite3.Row]:

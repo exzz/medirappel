@@ -101,15 +101,20 @@ async def send_due(conn) -> None:
         if not claimed:
             log.info("SMS reminder %s no longer planned, not sent", r["id"])
             continue
-        try:
-            gid = await smsgate.send(r["phone"], r["body"])
-        except Exception as exc:
-            fail(conn, r["id"], claimed["attempts"], f"envoi: {exc}")
-            continue
-        conn.execute("UPDATE reminder SET status = 'submitted', gateway_id = ?, sent_at = ?,"
-                     " reason = NULL, updated_at = ? WHERE id = ?",
-                     (gid, iso(planner.now()), iso(planner.now()), r["id"]))
-        log.info("SMS reminder %s handed to SMSGate for %s", r["id"], mask(r["phone"]))
+        await hand_over(conn, r, claimed["attempts"])
+
+
+async def hand_over(conn, r, attempts: int) -> None:
+    """Send a row already claimed as `sending`."""
+    try:
+        gid = await smsgate.send(r["phone"], r["body"])
+    except Exception as exc:
+        fail(conn, r["id"], attempts, f"envoi: {exc}")
+        return
+    conn.execute("UPDATE reminder SET status = 'submitted', gateway_id = ?, sent_at = ?,"
+                 " reason = NULL, updated_at = ? WHERE id = ?",
+                 (gid, iso(planner.now()), iso(planner.now()), r["id"]))
+    log.info("SMS reminder %s handed to SMSGate for %s", r["id"], mask(r["phone"]))
 
 
 async def poll_states(conn) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import logging.handlers
 import os
@@ -15,7 +16,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, config, db, journal, planner, scheduler
+from . import auth, config, db, journal, planner, scheduler, smsgate
 from .config import BASE_DIR
 from .planner import iso, mask
 
@@ -78,7 +79,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
-templates.env.globals.update(status=STATUS, mask=mask)
+templates.env.globals.update(status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
 
 
 @app.middleware("http")
@@ -164,18 +165,35 @@ def _label(d: date) -> str:
     return f"{DAYS[d.weekday()]} {d.day} {MONTHS[d.month - 1]}"
 
 
+def _visible(user, managed) -> list:
+    """Practitioners whose planning this user may open (CLAUDE.md §8)."""
+    if user["role"] == "practitioner":
+        return [p for p in managed if p["practitioner_id"] == user["practitioner_id"]]
+    if user["role"] == "assistant":
+        ids = json.loads(user["practitioner_ids"] or "[]")
+        return [p for p in managed if p["practitioner_id"] in ids]
+    return managed
+
+
+def _practitioner(user, managed, practitioner: int | None) -> tuple[int | None, str | None]:
+    """A practitioner only sees themself; an assistant or admin picks among visible ones.
+
+    The name returned is the practitioner's account name: the one written in the SMS."""
+    if user["role"] == "practitioner":
+        return user["practitioner_id"], user["name"]
+    managed = _visible(user, managed)
+    choice = next((p for p in managed if p["practitioner_id"] == practitioner), managed[0] if managed else None)
+    return (choice["practitioner_id"], choice["name"]) if choice else (None, None)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def day_page(request: Request, day: str | None = None, practitioner: int | None = None,
-                   conn=Depends(get_conn)):
+                   refresh: str | None = None, conn=Depends(get_conn)):
     user = require_user(request, conn)
-    managed = planner.managed_practitioners(conn)
-    if user["role"] == "practitioner":
-        pid, name = user["practitioner_id"], user["name"]
-    else:
-        choice = next((p for p in managed if p["practitioner_id"] == practitioner), managed[0] if managed else None)
-        if choice is None:
-            return templates.TemplateResponse(request, "day.html", {"user": user, "managed": [], "pid": None})
-        pid, name = choice["practitioner_id"], choice["name"]
+    managed = _visible(user, planner.managed_practitioners(conn))
+    pid, name = _practitioner(user, managed, practitioner)
+    if pid is None:
+        return templates.TemplateResponse(request, "day.html", {"user": user, "managed": [], "pid": None})
 
     today = planner.now().date()
     try:
@@ -184,7 +202,7 @@ async def day_page(request: Request, day: str | None = None, practitioner: int |
         raise HTTPException(400, "Date invalide.")
     tl = config.settings()["timeline"]
 
-    warning = None
+    warning = "Logiciel du cabinet injoignable : planning non rechargé." if refresh == "failed" else None
     try:
         if current >= today:
             # Future days: always re-read the agenda (user decision).
@@ -208,22 +226,55 @@ async def day_page(request: Request, day: str | None = None, practitioner: int |
         "timeline": timeline, "current": current,
         "current_label": f"{LONG_DAYS[current.weekday()]} {current.day} {LONG_MONTHS[current.month - 1]}",
         "past": current < today, "now": iso(planner.now()), "warning": warning,
+        "refreshed": refresh == "ok",
+        "optout": {r[0] for r in conn.execute("SELECT patient_id FROM optout")},
     })
+
+
+@app.post("/refresh")
+async def refresh_planning(request: Request, day: str = Form(...), practitioner: int | None = Form(None),
+                           conn=Depends(get_conn)):
+    """Re-read the whole upcoming agenda of one practitioner from Trophy, bypassing the cache."""
+    user = require_user(request, conn)
+    pid, name = _practitioner(user, planner.managed_practitioners(conn), practitioner)
+    if pid is None:
+        raise HTTPException(404, "Aucun praticien.")
+    today = planner.now().date()
+    try:
+        await planner.sync(conn, pid, name, today, today + timedelta(days=scheduler.horizon()),
+                           force=True, late_before=planner.now())
+        result = "ok"
+    except Exception as exc:
+        log.warning("planning refresh failed for practitioner %s: %s", pid, exc)
+        result = "failed"
+    journal.record(conn, "planning.refresh", user_id=user["id"], entity="practitioner", entity_id=pid,
+                   data={"result": result})
+    return RedirectResponse(f"/?day={day[:10]}&practitioner={pid}&refresh={result}", status_code=303)
 
 
 # ---------------------------------------------------------------- actions
 
-def _act(request: Request, conn, rid: int, action: str, sql: str, params: tuple) -> RedirectResponse:
+def _own(request: Request, conn, rid: int):
     user = require_user(request, conn)
-    row = conn.execute("SELECT practitioner_id, appointment_at FROM reminder WHERE id = ?", (rid,)).fetchone()
-    if row is None or (user["role"] == "practitioner" and row["practitioner_id"] != user["practitioner_id"]):
+    row = conn.execute("SELECT * FROM reminder WHERE id = ?", (rid,)).fetchone()
+    if row is None or (user["role"] != "admin" and row["practitioner_id"] not in
+                       {p["practitioner_id"] for p in _visible(user, planner.managed_practitioners(conn))}):
         raise HTTPException(404, "SMS introuvable.")
+    return user, row
+
+
+def _back(row, extra: str = "") -> RedirectResponse:
+    return RedirectResponse(f"/?day={row['appointment_at'][:10]}&practitioner={row['practitioner_id']}{extra}",
+                            status_code=303)
+
+
+def _act(request: Request, conn, rid: int, action: str, sql: str, params: tuple) -> RedirectResponse:
+    user, row = _own(request, conn, rid)
     if conn.execute(sql, (*params, rid)).rowcount:
         journal.record(conn, f"reminder.{action}", user_id=user["id"], entity="reminder", entity_id=rid)
     else:
         log.info("reminder.%s refused (wrong status) user=%s reminder=%s", action, user["login"], rid)
-    return RedirectResponse(f"/?day={row['appointment_at'][:10]}&practitioner={row['practitioner_id']}",
-                            status_code=303)
+    return _back(row)
 
 
 @app.post("/reminder/{rid}/cancel")
@@ -248,3 +299,85 @@ def retry(request: Request, rid: int, conn=Depends(get_conn)):
                 "UPDATE reminder SET status = 'planned', attempts = 1, send_at = ?, updated_at = ?"
                 " WHERE status = 'failed' AND id = ?",
                 (iso(planner.now()), iso(planner.now())))
+
+
+@app.post("/reminder/{rid}/send")
+async def send_now(request: Request, rid: int, conn=Depends(get_conn)):
+    """Force, once, an SMS skipped because the appointment was booked after the automatic send."""
+    user, row = _own(request, conn, rid)
+    names = {p["practitioner_id"]: p["name"] for p in planner.managed_practitioners(conn)}
+    day = date.fromisoformat(row["appointment_at"][:10])
+    try:  # the appointment may have moved or gone since the page was shown
+        await planner.sync(conn, row["practitioner_id"], names[row["practitioner_id"]], day, day,
+                           force=True, late_before=planner.now())
+    except Exception as exc:
+        log.warning("send-now re-read failed for reminder %s: %s", rid, exc)
+        return _back(row, "&refresh=failed")
+    # attempts = 2: a failure goes straight to `failed`, no automatic retry.
+    claimed = conn.execute("UPDATE reminder SET status = 'sending', attempts = 2, updated_at = ?"
+                           " WHERE id = ? AND status = 'skipped' AND reason = ? AND appointment_at > ?"
+                           " RETURNING *", (iso(planner.now()), rid, planner.LATE, iso(planner.now()))).fetchone()
+    if not claimed:
+        log.info("reminder.send_now refused (wrong status) user=%s reminder=%s", user["login"], rid)
+        return _back(row)
+    journal.record(conn, "reminder.send_now", user_id=user["id"], entity="reminder", entity_id=rid)
+    await scheduler.hand_over(conn, claimed, 2)
+    return _back(row)
+
+
+@app.post("/reminder/{rid}/exclude")
+def exclude(request: Request, rid: int, conn=Depends(get_conn)):
+    """The patient no longer wants SMS: local opt-out list, for every practitioner."""
+    user, row = _own(request, conn, rid)
+    if conn.execute("INSERT OR IGNORE INTO optout (patient_id, user_id, created_at) VALUES (?, ?, ?)",
+                    (row["patient_id"], user["id"], iso(planner.now()))).rowcount:
+        # Now, not at the next re-read: that re-read may fail and the SMS would leave.
+        conn.execute("UPDATE reminder SET status = 'skipped', reason = ?, updated_at = ?"
+                     " WHERE patient_id = ? AND status IN ('planned', 'cancelled')",
+                     (planner.EXCLUDED, iso(planner.now()), row["patient_id"]))
+        journal.record(conn, "patient.exclude", user_id=user["id"], entity="patient", entity_id=row["patient_id"])
+    return _back(row)
+
+
+@app.post("/reminder/{rid}/include")
+def include(request: Request, rid: int, conn=Depends(get_conn)):
+    """Undo an exclusion; the next agenda re-read (the page reload) plans the SMS again."""
+    user, row = _own(request, conn, rid)
+    if conn.execute("DELETE FROM optout WHERE patient_id = ?", (row["patient_id"],)).rowcount:
+        journal.record(conn, "patient.include", user_id=user["id"], entity="patient", entity_id=row["patient_id"])
+    return _back(row)
+
+
+# ----------------------------------------------------------- free message
+
+def _message_page(request, user, **ctx):
+    g = config.settings()["smsgate"]
+    return templates.TemplateResponse(request, "message.html", {
+        "user": user, "simulation": g.get("simulation"), "test_number": g.get("test_number"), **ctx})
+
+
+@app.get("/message", response_class=HTMLResponse)
+def message_page(request: Request, conn=Depends(get_conn)):
+    return _message_page(request, require_user(request, conn))
+
+
+@app.post("/message", response_class=HTMLResponse)
+async def send_message(request: Request, phone: str = Form(...), text: str = Form(...), conn=Depends(get_conn)):
+    """A free SMS, sent at once. Neither the number nor the text is stored (CLAUDE.md §7)."""
+    user = require_user(request, conn)
+    number, body = planner.french_mobile(phone), planner.to_gsm(text.strip())
+    error = ("Numéro invalide : un mobile français (06 ou 07) est attendu." if not number
+             else "Message vide." if not body
+             else f"Message trop long : {len(body)} caractères, 160 au plus." if len(body) > 160 else None)
+    if error:
+        return _message_page(request, user, error=error, phone=phone, text=text)
+    try:
+        gid = await smsgate.send(number, body)
+    except Exception as exc:
+        log.warning("free SMS to %s failed: %s", mask(number), exc)
+        return _message_page(request, user, error="Échec de l'envoi : téléphone SMSGate injoignable.",
+                             phone=phone, text=text)
+    journal.record(conn, "message.send", user_id=user["id"], entity="message", entity_id=None,
+                   data={"chars": len(body), "gateway_id": gid})
+    log.info("free SMS handed to SMSGate for %s by %s", mask(number), user["login"])
+    return _message_page(request, user, sent=mask(number))

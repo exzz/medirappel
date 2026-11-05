@@ -7,6 +7,7 @@ short sessions compensate.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 import sqlite3
@@ -67,12 +68,14 @@ def sync_users(conn: sqlite3.Connection, accounts: list[dict]) -> None:
     for a in accounts:
         logins.append(a["login"])
         conn.execute(
-            """INSERT INTO user (login, name, role, practitioner_id, pin_hash, pin_salt, active)
-               VALUES (?, ?, ?, ?, ?, ?, 1)
+            """INSERT INTO user (login, name, role, practitioner_id, practitioner_ids, pin_hash, pin_salt, active)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 1)
                ON CONFLICT(login) DO UPDATE SET name = excluded.name, role = excluded.role,
-                 practitioner_id = excluded.practitioner_id, pin_hash = excluded.pin_hash,
+                 practitioner_id = excluded.practitioner_id, practitioner_ids = excluded.practitioner_ids,
+                 pin_hash = excluded.pin_hash,
                  pin_salt = excluded.pin_salt, active = 1""",
             (a["login"], a["name"], a["role"], a.get("trophy_practitioner_id"),
+             json.dumps(a["trophy_practitioner_ids"]) if a["role"] == "assistant" else None,
              a["pin_hash"], a["pin_salt"]),
         )
     marks = ",".join("?" * len(logins)) or "''"

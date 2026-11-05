@@ -99,10 +99,13 @@ def users() -> list[dict]:
         missing = [k for k in ("login", "name", "role", "pin_hash", "pin_salt") if not u.get(k)]
         if missing:
             raise ConfigError(f"users.json: entry {n} lacks {', '.join(missing)}.")
-        if u["role"] not in ("practitioner", "admin"):
+        if u["role"] not in ("practitioner", "assistant", "admin"):
             raise ConfigError(f"users.json: entry {n} has an unknown role.")
         if u["role"] == "practitioner" and not isinstance(u.get("trophy_practitioner_id"), int):
             raise ConfigError(f"users.json: entry {n} needs an integer trophy_practitioner_id.")
+        ids = u.get("trophy_practitioner_ids")
+        if u["role"] == "assistant" and not (isinstance(ids, list) and ids and all(isinstance(i, int) for i in ids)):
+            raise ConfigError(f"users.json: entry {n} needs a list of integer trophy_practitioner_ids.")
         if u["login"] in seen:
             raise ConfigError(f"users.json: duplicate login '{u['login']}'.")
         seen.add(u["login"])

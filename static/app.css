@@ -38,13 +38,16 @@ code { font-size: .9em; }
 
 .wrap { max-width: 64rem; margin: 0 auto; padding: 0 1rem; }
 .wrap.narrow { max-width: 30rem; }
+/* Toute la largeur, logo calé à gauche, quelle que soit la taille d'écran (demande de l'utilisateur). */
+.wrap:not(.narrow) { max-width: none; }
+@media (min-width: 1200px) { .wrap:not(.narrow) { padding: 0 1.5rem; } }
 
 /* ---------------------------------------------------------------- header */
 .bar { background: var(--primary-dark); color: #fff; padding: .75rem 0; }
 .bar .wrap { display: flex; align-items: center; gap: .75rem; }
 .brand { color: #fff; text-decoration: none; font-weight: 650; font-size: var(--t-section);
          display: inline-flex; align-items: center; gap: .45rem; }
-.brand img { background: #fff; border-radius: 6px; }
+.brand img { display: block; }
 .who { margin-left: auto; font-size: var(--t-detail); opacity: .9; min-width: 0;
        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logout { margin: 0; flex-shrink: 0; }
@@ -84,6 +87,8 @@ h1 { font-size: var(--t-title); line-height: 1.2; margin: 0 0 .25rem; }
 /* ------------------------------------------------------------------ page */
 .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .head h1::first-letter { text-transform: uppercase; }
+.tools { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.tools form { margin: 0; }
 .pick { display: flex; align-items: center; gap: .5rem; }
 .pick label { color: var(--muted); font-size: var(--t-detail); }
 select { min-height: var(--target); font: inherit; padding: 0 .75rem; border: 1px solid var(--line);
@@ -97,54 +102,71 @@ select { min-height: var(--target); font: inherit; padding: 0 .75rem; border: 1p
 /* ----------------------------------------------------------------- table */
 .sms { width: 100%; border-collapse: collapse; background: var(--paper);
        border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
-.sms th { text-align: left; font-size: var(--t-detail); font-weight: 600; color: var(--muted);
+.sms th { text-align: left; white-space: nowrap; font-size: var(--t-detail); font-weight: 600; color: var(--muted);
           padding: .6rem .75rem; border-bottom: 1px solid var(--line); }
-.sms td { padding: .55rem .75rem; vertical-align: middle; }
-.sms tr:not(.msg) td { border-top: 1px solid var(--line); }
-.sms .time { font-weight: 650; font-size: 1.05rem; }
+@media (min-width: 1101px) { .sms .name { width: 1%; white-space: nowrap; } }  /* Exclure right after the name */
+.sms .text { color: var(--muted); line-height: 1.35; }
+.sms .text summary { cursor: pointer; color: var(--primary-dark); width: max-content; }
+/* One font size in the table: the status chip's. */
+.sms { font-size: var(--t-detail); }
+.sms td { padding: .35rem .75rem; vertical-align: middle; border-top: 1px solid var(--line); }
+/* Same height with or without a button: button min-height + padding. */
+.sms tbody td { height: calc(2.8rem + 1px); }
+.sms .time { font-weight: 650; }
 .sms .num { white-space: nowrap; }
 .sms tr.neutral td:not(.act) { color: var(--muted); }
-.sms .msg td { padding-top: 0; }
-.sms details summary { cursor: pointer; color: var(--primary-dark); font-size: var(--t-detail); width: max-content; }
-.sms details p { margin: .35rem 0 .2rem; padding: .6rem .8rem; background: var(--primary-light);
-                 border-radius: var(--r) var(--r) var(--r) 2px; max-width: 40rem; }
 .sms .act { text-align: right; width: 1%; white-space: nowrap; }
-.sms .act form { margin: 0; }
+.sms .act form { margin: 0; display: inline; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-.chip { display: inline-block; padding: .1rem .55rem; border-radius: 99px; font-size: var(--t-detail);
+.chip { display: inline-block; padding: .1rem .55rem; border-radius: 99px;
         font-weight: 600; white-space: nowrap; }
 .chip.good { background: var(--primary-light); color: var(--primary-dark); }
 .chip.wait { background: var(--wait-light); color: var(--wait); }
 .chip.bad { background: var(--alert-light); color: var(--alert); }
 .chip.neutral { background: var(--surface); color: var(--muted); }
-.why { display: block; font-size: var(--t-detail); color: var(--muted); }
+.why { display: block; color: var(--muted); }
+/* Exclude: grey and exactly the size of a status chip. */
+.sms .excl form { margin: 0; }
+.chip-btn { display: inline-block; padding: .1rem .55rem; border-radius: 99px; font: inherit; font-weight: 600;
+            line-height: inherit; cursor: pointer; color: var(--muted); background: var(--surface); border: 0; }
+.chip-btn:hover { color: var(--alert); background: var(--alert-light); }
 
-.btn { min-height: var(--target); padding: .3rem 1.1rem; font: inherit; font-weight: 600; cursor: pointer;
+/* Compact buttons (user request): shorter table rows. */
+.btn { min-height: 2.1rem; padding: .2rem .75rem; font: inherit; font-size: var(--t-detail); font-weight: 600; cursor: pointer;
        color: #fff; background: var(--primary-dark); border: 1px solid var(--primary-dark); border-radius: var(--r); }
 .btn.ghost { color: var(--primary-dark); background: var(--paper); }
+a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+.free { display: grid; gap: .4rem; }
+.free label { color: var(--muted); font-size: var(--t-detail); margin-top: .5rem; }
+.free input, .free textarea { font: inherit; padding: .5rem .75rem; border: 1px solid var(--line);
+                              border-radius: var(--r); background: var(--paper); color: var(--ink); }
+.free .btn { justify-self: start; margin-top: .75rem; }
 .btn.ghost-bad { color: var(--alert); background: var(--paper); border-color: var(--alert); }
+.btn.ghost-muted { color: var(--muted); background: var(--paper); border-color: var(--line); }
 
-/* Phone: one block per appointment instead of a table. */
-@media (max-width: 700px) {
-  .who { display: none; }
-  .logout { margin-left: auto; }
+/* Phone: no room for the user name. */
+@media (max-width: 700px) { .who { display: none; } .logout { margin-left: auto; } }
+/* Below ~1100px the table no longer fits: one block per appointment. */
+@media (max-width: 1100px) {
   .sms thead { display: none; }
   .sms, .sms tbody, .sms tr, .sms td { display: block; }
-  .sms tr:not(.msg) {
-    display: grid; gap: .15rem .75rem; padding: .7rem .75rem 0; border-top: 1px solid var(--line);
+  .sms tr {
+    display: grid; gap: .15rem .75rem; padding: .6rem .75rem; border-top: 1px solid var(--line);
     grid-template-columns: 3.4rem 1fr auto;
-    grid-template-areas: "time name act" ". phone act" ". send act" ". state act";
+    grid-template-areas: "time name act" ". excl act" ". phone act" ". send act" ". state act" ". text text";
   }
-  .sms tr:not(.msg) td { border: 0; padding: 0; }
+  .sms tr td { border: 0; padding: 0; height: auto; }
   .sms .time { grid-area: time; }
   .sms .name { grid-area: name; font-weight: 600; }
-  .sms .phone { grid-area: phone; font-size: var(--t-detail); }
-  .sms .send { grid-area: send; font-size: var(--t-detail); color: var(--muted); }
+  .sms .excl { grid-area: excl; width: auto; }
+  .sms .phone { grid-area: phone; }
+  .sms .send { grid-area: send; color: var(--muted); }
   .sms .send::before { content: "Envoi "; }
   .sms .state { grid-area: state; }
-  .sms .act { grid-area: act; align-self: center; width: auto; }
-  .sms .msg td { padding: .3rem .75rem .7rem 4.9rem; }
+  .sms .text { grid-area: text; }
+  .sms .act { grid-area: act; align-self: center; width: auto; display: flex; flex-direction: column; gap: .35rem; }
+  .sms .act .btn { width: 100%; white-space: normal; max-width: 7.5rem; line-height: 1.2; }
 }
 
 /* ------------------------------------------------------------ PIN pad */
