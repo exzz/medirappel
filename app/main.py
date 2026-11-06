@@ -8,7 +8,6 @@ import json
 import logging
 import logging.handlers
 import os
-import socket
 import sqlite3
 import time
 import unicodedata
@@ -444,16 +443,14 @@ TAILNET = ipaddress.ip_network("100.64.0.0/10")
 
 
 async def _tailscale_out():
-    """Works when Tailscale runs in another container sharing our network (sidecar):
-    no CLI needed, only the route to the tailnet and tailscaled's own address."""
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect(("100.100.100.100", 53))  # UDP connect sends nothing: it only picks the route
-        own = s.getsockname()[0]
-    if ipaddress.ip_address(own) not in TAILNET:
-        return False, f"pas d'adresse Tailscale ici (sortie par {own}) : conteneur Tailscale arrêté ou réseau non partagé"
-    _, writer = await asyncio.wait_for(asyncio.open_connection("100.100.100.100", 53), 3)
+    """100.100.100.100 is tailscaled's own address: it answers whether Tailscale runs on
+    the host (containers reach the tailnet through its routing) or in a sidecar."""
+    try:
+        _, writer = await asyncio.wait_for(asyncio.open_connection("100.100.100.100", 53), 3)
+    except (OSError, asyncio.TimeoutError):
+        return False, "100.100.100.100 ne répond pas : Tailscale arrêté sur l'hôte, ou hôte hors du tailnet"
     writer.close()
-    return True, f"adresse {own}, Tailscale répond"
+    return True, "Tailscale répond (100.100.100.100)"
 
 
 async def _trophy():

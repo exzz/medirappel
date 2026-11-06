@@ -309,9 +309,8 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
 - Lien **« Diagnostic »** en pied de page (simple lien, demande de l'utilisateur) : page
   `/diagnostic`, une ligne par service, ✓ vert, ✗ rouge avec la raison, ou « – » si non
   vérifiable : Tailscale entrant (la page arrive-t-elle d'une adresse 100.64.0.0/10),
-  Tailscale sortant (adresse 100.64.0.0/10 sur la route vers le tailnet, et `100.100.100.100:53`
-  qui répond : sans commande `tailscale`, car Tailscale tournera dans un autre conteneur
-  partageant le réseau de MediRappel), API Trophy (vraie requête
+  Tailscale sortant (`100.100.100.100:53` qui répond, sans commande `tailscale` : Tailscale
+  tourne sur l'hôte et les conteneurs joignent le tailnet par son routage), API Trophy (vraie requête
   `/holidays` du jour, hors cache), SMSGate (`GET /health`, sans envoi). Tous les rôles.
 - Utilisable sur le poste du cabinet et sur téléphone (responsive). Contenu sur toute la largeur
   de l'écran ; sous 1100 px, le tableau devient une liste de blocs (il ne tient plus). Lignes compactes
@@ -399,9 +398,16 @@ Lancer : `uv run uvicorn app.main:app` (un seul processus). Tests : `uv run pyte
 Tables : `user`, `session`, `api_cache`, `reminder`, `optout` (un SMS par rendez-vous Trophy),
 `journal`. Heures locales `AAAA-MM-JJTHH:MM` dans `reminder`, UTC dans `journal`.
 
-Déploiement : comme `../trophy`, `Dockerfile` seul, **pas de compose** (décision de l'utilisateur).
-Image Ubuntu + venv uv, `TZ=Europe/Paris`, port 8222, utilisateur `app_medirappel`, `/data` en volume, configuration montée
-en lecture seule dans `/config` (`MEDIRAPPEL_*`), un seul processus, sur le serveur du cabinet.
+Déploiement : comme `../trophy`, `Dockerfile` seul, **pas de compose dans ce dépôt** (décision de l'utilisateur).
+Le compose commun (Trophy, Sterilog, MediRappel) vit dans **`/srv/compose/cabinet`**, avec son README :
+il ne construit rien, il prend les versions dans son `.env`. Tailscale tourne **sur l'hôte** : entrée par
+`tailscale serve` vers `127.0.0.1:8222`, sortie par le routage de l'hôte ; l'API Trophy y est `http://trophy:8333`.
+Image Ubuntu + venv uv, `TZ=Europe/Paris`, port 8222, utilisateur `app_medirappel` **uid:gid 10012:10012**
+(le même uid que sur l'hôte, propriétaire de `medirappel/config` et `medirappel/data`), `/data` en volume,
+configuration montée en lecture seule dans `/config` (`MEDIRAPPEL_*`), système de fichiers en lecture seule,
+un seul processus, sur le serveur du cabinet. `--proxy-headers` : `X-Forwarded-For` n'est cru que de
+`FORWARDED_ALLOW_IPS` (le réseau du compose, par où arrive le `tailscale serve`), sinon tous les postes
+partagent l'adresse de la passerelle et le plafond d'essais de PIN.
 `deploy/release.sh X.Y.Z` builde `medirappel:X.Y.Z` et `:latest`, puis crée le tag git `vX.Y.Z`
 seulement si le build réussit (arbre propre exigé). La version vient du tag, pas de `pyproject.toml`.
 

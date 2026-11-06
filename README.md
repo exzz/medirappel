@@ -20,16 +20,5 @@ deploy/release.sh 1.0.0      # build medirappel:1.0.0 (+ :latest), puis tag git 
 
 Le tag n'est créé que si le build réussit, et seulement sur un arbre propre.
 
-```sh
-docker run -d --name medirappel --restart unless-stopped -p 8222:8222 \
-  -v /chemin/config:/config:ro \
-  -v medirappel-data:/data \
-  medirappel:1.0.0
-```
-
-`/config` contient `settings.json` et `users.json` (jamais dans l'image).
-Dans le conteneur, `127.0.0.1` désigne le conteneur lui-même : `trophy.url` dans `settings.json`
-doit pointer vers l'API Trophy joignable depuis le conteneur (adresse Tailscale ou réseau Docker).
-Un seul conteneur, jamais `--workers` > 1.
-Avec Tailscale dans son propre conteneur, lancer MediRappel dans son réseau
-(`--network container:<conteneur-tailscale>`, sans `-p`) : la page Diagnostic le vérifie.
+Déploiement : le compose du cabinet, dans `/srv/compose/cabinet` (voir son README) ;
+reporter la version dans son `.env` (`MEDIRAPPEL_VERSION`). Un seul conteneur, jamais `--workers` > 1.

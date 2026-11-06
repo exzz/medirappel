@@ -25,7 +25,8 @@ FROM ${UBUNTU}
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 tzdata \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app_medirappel \
+ && groupadd --system --gid 10012 app_medirappel \
+ && useradd --system --uid 10012 --gid 10012 --home-dir /app --shell /usr/sbin/nologin app_medirappel \
  && mkdir /data && chown app_medirappel /data
 
 WORKDIR /app
@@ -43,7 +44,8 @@ ENV PATH=/app/.venv/bin:$PATH \
     TZ=Europe/Paris \
     MEDIRAPPEL_SETTINGS=/config/settings.json \
     MEDIRAPPEL_USERS=/config/users.json \
-    MEDIRAPPEL_DATA=/data
+    MEDIRAPPEL_DATA=/data \
+    FORWARDED_ALLOW_IPS=127.0.0.1
 
 USER app_medirappel
 VOLUME /data
@@ -54,5 +56,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # UN SEUL processus : ordonnanceur, cache et file d'envoi vivent dedans.
 # Jamais --workers > 1 (double envoi).
+# --proxy-headers : l'adresse du poste (plafond d'essais de PIN, diagnostic Tailscale) vient
+# de X-Forwarded-For, mais seulement depuis FORWARDED_ALLOW_IPS (au lancement : le réseau
+# du proxy, jamais celui du cabinet), comme Sterilog.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8222", \
-     "--no-server-header"]
+     "--no-server-header", "--proxy-headers"]
