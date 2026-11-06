@@ -35,15 +35,13 @@ COPY templates ./templates
 COPY static ./static
 COPY medirappel.py ./
 
-# Les secrets ne sont JAMAIS dans l'image : settings.json, trophy-api.json et
-# users.json se montent en lecture seule dans /config ; la base et les logs
+# Les secrets ne sont JAMAIS dans l'image : settings.json et users.json se montent en lecture seule dans /config ; la base et les logs
 # vivent dans le volume /data.
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TZ=Europe/Paris \
     MEDIRAPPEL_SETTINGS=/config/settings.json \
-    MEDIRAPPEL_TROPHY=/config/trophy-api.json \
     MEDIRAPPEL_USERS=/config/users.json \
     MEDIRAPPEL_DATA=/data
 

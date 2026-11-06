@@ -61,6 +61,7 @@ def clock(monkeypatch):
 def env(tmp_path, monkeypatch, clock):
     settings = json.load(open(config.BASE_DIR / "settings.example.json"))
     settings["throttle"] = {"min_delay_s": 0, "max_delay_s": 0}
+    settings["trophy"] = {"url": "http://trophy", "api_key": "k"}
     pin_hash, salt = auth.hash_pin("123456")
     users = {"users": [
         {"login": "bellec", "name": "Dr Bellec", "role": "practitioner", "trophy_practitioner_id": 1,
@@ -70,12 +71,10 @@ def env(tmp_path, monkeypatch, clock):
         {"login": "assist", "name": "Assistante", "role": "assistant", "trophy_practitioner_ids": [2],
          "pin_hash": pin_hash, "pin_salt": salt},
     ]}
-    for name, data in (("settings.json", settings), ("users.json", users),
-                       ("trophy.json", {"url": "http://trophy", "api_key": "k"})):
+    for name, data in (("settings.json", settings), ("users.json", users)):
         (tmp_path / name).write_text(json.dumps(data))
     monkeypatch.setenv("MEDIRAPPEL_SETTINGS", str(tmp_path / "settings.json"))
     monkeypatch.setenv("MEDIRAPPEL_USERS", str(tmp_path / "users.json"))
-    monkeypatch.setenv("MEDIRAPPEL_TROPHY", str(tmp_path / "trophy.json"))
     monkeypatch.setenv("MEDIRAPPEL_NO_SCHEDULER", "1")
     monkeypatch.setattr(scheduler, "_built_on", None)
     monkeypatch.setattr(db, "DATA_DIR", tmp_path)

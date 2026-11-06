@@ -12,6 +12,10 @@
   "excluded_appointment_types": [],
   "throttle": { "min_delay_s": 60, "max_delay_s": 90 },
   "retry_delay_minutes": 60,
+  "trophy": {
+    "url": "http://127.0.0.1:8081",
+    "api_key": "changer-moi"
+  },
   "smsgate": {
     "url": "http://100.64.0.10:8080",
     "username": "sms",

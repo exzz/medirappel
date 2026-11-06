@@ -1,6 +1,6 @@
-"""Configuration files: settings.json, trophy-api.json, users.json (none versioned).
+"""Configuration files: settings.json (Trophy API and SMSGate included), users.json (neither versioned).
 
-Paths can be overridden by MEDIRAPPEL_SETTINGS / MEDIRAPPEL_TROPHY / MEDIRAPPEL_USERS
+Paths can be overridden by MEDIRAPPEL_SETTINGS / MEDIRAPPEL_USERS
 (tests, container). Read once at startup; a restart applies changes.
 """
 
@@ -79,16 +79,15 @@ def settings() -> dict:
 
 @cache
 def trophy() -> dict:
-    t = _read("MEDIRAPPEL_TROPHY", "trophy-api.json")
+    t = dict(settings().get("trophy") or {})
     if not t.get("url") or not t.get("api_key"):
-        raise ConfigError("trophy-api.json: 'url' and 'api_key' are required.")
-    t.setdefault("endpoints", {})
+        raise ConfigError("settings.json: trophy.url and trophy.api_key are required.")
     t["endpoints"] = {
         "practitioners": "/practitioners",
         "appointments": "/appointments",
         "holidays": "/holidays",
         "patients": "/patients",
-        **t["endpoints"],
+        **t.get("endpoints", {}),
     }
     return t
 

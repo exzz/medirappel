@@ -33,7 +33,7 @@ plusieurs rappels par rendez-vous.
   **Aucun framework front**, aucune ressource distante (police, CDN) : comme Sterilog.
 - Fuseau `Europe/Paris` partout. Toutes les dates métier sont en heure locale.
 - Un seul processus uvicorn : cache, ordonnanceur et file d'envoi vivent dedans.
-- Git : à initialiser. Jamais versionnés : `settings.json`, `trophy-api.json`,
+- Git : à initialiser. Jamais versionnés : `settings.json`,
   `users.json`, `data/`. Versionnés : leurs modèles `*.example.json`.
 
 ---
@@ -150,22 +150,9 @@ API se fait dans une autre session Claude Code, dans `../trophy`**, pour garder 
 historique séparé (décision de l'utilisateur). Ici, on ne touche jamais au code de
 `../trophy`. On rédige le prompt à transmettre.
 
-Accès : `trophy-api.json` (jamais versionné) :
-
-```json
-{
-  "url": "http://127.0.0.1:8081",
-  "api_key": "…",
-  "endpoints": {
-    "practitioners": "/practitioners",
-    "patients": "/patients",
-    "patient": "/patients/{id}",
-    "appointments": "/appointments",
-    "holidays": "/holidays",
-    "appointment_types": "/appointment-types"
-  }
-}
-```
+Accès : bloc `trophy` de `settings.json` (jamais versionné ; fusion de l'ancien
+`trophy-api.json`, demande de l'utilisateur) : `url`, `api_key`, et `endpoints` facultatif
+(chemins par défaut `/practitioners`, `/appointments`, `/holidays`, `/patients`).
 
 En-tête `X-API-Key`. `/patients` pagine par 500, les plus récents d'abord.
 `/appointments` exige `practitioner`, `from` et `to` (AAAA-MM-JJ), et `with_patient`.
@@ -382,6 +369,7 @@ d'envoi ne change pas.
   "excluded_appointment_types": [],
   "throttle": { "min_delay_s": 60, "max_delay_s": 90 },
   "retry_delay_minutes": 60,
+  "trophy": { "url": "http://127.0.0.1:8081", "api_key": "…" },
   "smsgate": { "url": "http://100.x.y.z:8080", "username": "…", "password": "…",
                "simulation": true, "test_number": null },
   "cache_ttl_s": { "practitioners": 86400, "calendar": 86400, "appointments": 900 },
@@ -391,7 +379,7 @@ d'envoi ne change pas.
 ```
 
 ```
-app/config.py      lecture et validation de settings.json, trophy-api.json, users.json (MEDIRAPPEL_* pour d'autres chemins)
+app/config.py      lecture et validation de settings.json, users.json (MEDIRAPPEL_* pour d'autres chemins)
 app/db.py          schéma SQLite (MEDIRAPPEL_DATA)
 app/trophy.py      client de l'API Trophy, verrou, cache disque
 app/planner.py     règles : mobile français, GSM-7, gabarit, jours ouvrés, heure d'envoi, sync()
@@ -433,7 +421,7 @@ seulement si le build réussit (arbre propre exigé). La version vient du tag, p
   recevoir son rappel.
 - **Praticien sous le module SMS de Trophy** : il est exclu seulement parce qu'il
   n'a pas de compte. Lui créer un compte provoquerait des doublons.
-- **Secrets** : `trophy-api.json`, les identifiants SMSGate et `users.json` ne
+- **Secrets** : `settings.json` (clé de l'API Trophy, identifiants SMSGate) et `users.json` ne
   doivent jamais être committés.
 - **Ordonnanceur en mémoire** : un arrêt du service à l'heure d'envoi décale ou
   manque les envois (rattrapage jusqu'à `send_deadline`).

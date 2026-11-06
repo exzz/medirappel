@@ -9,7 +9,7 @@ curl -s -H "X-API-Key: $TROPHY_API_KEY" "http://127.0.0.1:8081/practitioners?inc
   | jq -r '.[] | "\(.id)\t\(.nom)\(if .inactif then " (inactif)" else "" end)"'
 ```
 
-Adresse et clé : celles de `trophy-api.json`. Sans `jq`, retirez la dernière ligne :
+Adresse et clé : `trophy.url` et `trophy.api_key` de `settings.json`. Sans `jq`, retirez la dernière ligne :
 la réponse JSON brute contient `id` et `nom` pour chaque praticien.
 
 ## Version et image Docker
@@ -27,8 +27,8 @@ docker run -d --name medirappel --restart unless-stopped -p 8222:8222 \
   medirappel:1.0.0
 ```
 
-`/config` contient `settings.json`, `trophy-api.json` et `users.json` (jamais dans l'image).
-Dans le conteneur, `127.0.0.1` désigne le conteneur lui-même : l'`url` de `trophy-api.json`
+`/config` contient `settings.json` et `users.json` (jamais dans l'image).
+Dans le conteneur, `127.0.0.1` désigne le conteneur lui-même : `trophy.url` dans `settings.json`
 doit pointer vers l'API Trophy joignable depuis le conteneur (adresse Tailscale ou réseau Docker).
 Un seul conteneur, jamais `--workers` > 1.
 Avec Tailscale dans son propre conteneur, lancer MediRappel dans son réseau
