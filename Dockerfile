@@ -25,8 +25,8 @@ FROM ${UBUNTU}
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 tzdata \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin medirappel \
- && mkdir /data && chown medirappel /data
+ && useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin app_medirappel \
+ && mkdir /data && chown app_medirappel /data
 
 WORKDIR /app
 COPY --from=construction /app/.venv /app/.venv
@@ -47,14 +47,14 @@ ENV PATH=/app/.venv/bin:$PATH \
     MEDIRAPPEL_USERS=/config/users.json \
     MEDIRAPPEL_DATA=/data
 
-USER medirappel
+USER app_medirappel
 VOLUME /data
-EXPOSE 8000
+EXPOSE 8222
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/login', timeout=4)"]
+  CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8222/login', timeout=4)"]
 
 # UN SEUL processus : ordonnanceur, cache et file d'envoi vivent dedans.
 # Jamais --workers > 1 (double envoi).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8222", \
      "--no-server-header"]

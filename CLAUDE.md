@@ -412,7 +412,7 @@ Tables : `user`, `session`, `api_cache`, `reminder`, `optout` (un SMS par rendez
 `journal`. Heures locales `AAAA-MM-JJTHH:MM` dans `reminder`, UTC dans `journal`.
 
 Déploiement : comme `../trophy`, `Dockerfile` seul, **pas de compose** (décision de l'utilisateur).
-Image Ubuntu + venv uv, `TZ=Europe/Paris`, port 8000, `/data` en volume, configuration montée
+Image Ubuntu + venv uv, `TZ=Europe/Paris`, port 8222, utilisateur `app_medirappel`, `/data` en volume, configuration montée
 en lecture seule dans `/config` (`MEDIRAPPEL_*`), un seul processus, sur le serveur du cabinet.
 `deploy/release.sh X.Y.Z` builde `medirappel:X.Y.Z` et `:latest`, puis crée le tag git `vX.Y.Z`
 seulement si le build réussit (arbre propre exigé). La version vient du tag, pas de `pyproject.toml`.

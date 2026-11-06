@@ -21,7 +21,7 @@ deploy/release.sh 1.0.0      # build medirappel:1.0.0 (+ :latest), puis tag git 
 Le tag n'est créé que si le build réussit, et seulement sur un arbre propre.
 
 ```sh
-docker run -d --name medirappel --restart unless-stopped -p 8000:8000 \
+docker run -d --name medirappel --restart unless-stopped -p 8222:8222 \
   -v /chemin/config:/config:ro \
   -v medirappel-data:/data \
   medirappel:1.0.0
