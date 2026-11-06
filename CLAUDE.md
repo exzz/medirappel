@@ -115,6 +115,14 @@ rien.
   ignoré (voir plus haut) ; le secrétariat coche parfois la case à l'avance.
 - **Jours passés** : jamais d'appel à Trophy. On affiche ce qui est en base.
 
+### Envoi automatique
+
+`auto_send` (`settings.json`, `true` par défaut, demande de l'utilisateur) : à `false`, la
+planification continue (tableau, relectures) mais l'ordonnanceur n'envoie plus rien de
+lui-même, comme un service arrêté : rattrapage jusqu'à `send_deadline` si on le
+réactive, `missed` ensuite. Restent possibles : « Envoyer maintenant », « Relancer » et
+« Envoyer un message ». Bandeau d'avertissement sur les jours non passés, avertissement au démarrage.
+
 ### Débit d'envoi
 
 Les envois sont **temporisés** par un délai aléatoire entre deux messages,
@@ -237,6 +245,9 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   sont des données de santé. La base garde l'identifiant Trophy du patient, son
   nom (les jours passés ne rappellent jamais Trophy), son numéro normalisé et le
   texte, le tout purgé avec la rétention.
+- La liste des patients pour « Envoyer un message » (identifiant, nom, prénom, date de
+  naissance, téléphones) est en cache dans `api_cache` ; purgée si elle n'a pas servi
+  depuis 2 jours, comme le reste du cache.
 - **Rétention** : SMS et cache purgés après `retention_days` (365).
 - **Logs applicatifs** (`data/logs/medirappel.log`, 5 Mo × 5) : tout y passe
   (demande de l'utilisateur). Chaque entrée du journal d'audit y est recopiée par
@@ -302,6 +313,19 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   par SMSGate (simulation et numéro de test respectés), accents retirés, 160 caractères
   au plus. Ni le numéro ni le texte ne sont stockés : journal `message.send` (longueur,
   identifiant SMSGate), log avec numéro masqué. Pas de suivi de livraison. Tous les rôles.
+  Premier champ **« Patient »** (facultatif) : recherche dans la liste des patients de Trophy,
+  avec la **date de naissance** pour départager les homonymes (comme Sterilog) ; le choix
+  remplit le mobile (mobile puis fixe, normalisés), qui reste modifiable à la main. La liste
+  est en cache (`api_cache`, clé `patients`) : chargement complet une fois par jour, sinon
+  l'ouverture de la page relit, en arrière-plan, la première page de `/patients` (500, plus
+  récents d'abord) et la fusionne. La recherche ne lit que le cache.
+- Lien **« Diagnostic »** en pied de page (simple lien, demande de l'utilisateur) : page
+  `/diagnostic`, une ligne par service, ✓ vert, ✗ rouge avec la raison, ou « – » si non
+  vérifiable : Tailscale entrant (la page arrive-t-elle d'une adresse 100.64.0.0/10),
+  Tailscale sortant (adresse 100.64.0.0/10 sur la route vers le tailnet, et `100.100.100.100:53`
+  qui répond : sans commande `tailscale`, car Tailscale tournera dans un autre conteneur
+  partageant le réseau de MediRappel), API Trophy (vraie requête
+  `/holidays` du jour, hors cache), SMSGate (`GET /health`, sans envoi). Tous les rôles.
 - Utilisable sur le poste du cabinet et sur téléphone (responsive). Contenu sur toute la largeur
   de l'écran ; sous 1100 px, le tableau devient une liste de blocs (il ne tient plus). Lignes compactes
   (demande de l'utilisateur) : boutons d'environ 36 px de haut, et non 56 px comme dans
@@ -352,6 +376,7 @@ d'envoi ne change pas.
   "reminder_days_before": 1,
   "send_time": "09:00",
   "send_deadline": "20:00",
+  "auto_send": true,
   "practice": { "name": "…", "address": "…", "phone": "…" },
   "sms_template": "…",
   "excluded_appointment_types": [],
@@ -374,7 +399,7 @@ app/smsgate.py     client SMSGate, mode simulation, numéro de test
 app/scheduler.py   boucles asyncio : planification quotidienne, envois temporisés, suivi des statuts, purge
 app/auth.py        PIN, sessions, comptes (repris de Sterilog)
 app/journal.py     journal d'audit chaîné (repris de Sterilog)
-app/main.py        routes : /login, /logout, / (jour), /refresh, /message, /reminder/{id}/cancel|restore|retry|send|exclude|include
+app/main.py        routes : /login, /logout, / (jour), /refresh, /message, /message/patients, /diagnostic, /reminder/{id}/cancel|restore|retry|send|exclude|include
 templates/ static/
 medirappel.py      ligne de commande : hash-pin (pour users.json), verify (journal)
 tests/             faux Trophy (httpx.MockTransport), horloge figée, SMSGate en simulation
@@ -386,9 +411,11 @@ Lancer : `uv run uvicorn app.main:app` (un seul processus). Tests : `uv run pyte
 Tables : `user`, `session`, `api_cache`, `reminder`, `optout` (un SMS par rendez-vous Trophy),
 `journal`. Heures locales `AAAA-MM-JJTHH:MM` dans `reminder`, UTC dans `journal`.
 
-Déploiement (**pas encore écrit**) : comme Sterilog (`../sterilog/deploy/`). Image Docker, `TZ=Europe/Paris`,
-`/data` en volume, configuration montée en lecture seule, sidecar Tailscale, un seul
-processus, sur le serveur du cabinet.
+Déploiement : comme `../trophy`, `Dockerfile` seul, **pas de compose** (décision de l'utilisateur).
+Image Ubuntu + venv uv, `TZ=Europe/Paris`, port 8000, `/data` en volume, configuration montée
+en lecture seule dans `/config` (`MEDIRAPPEL_*`), un seul processus, sur le serveur du cabinet.
+`deploy/release.sh X.Y.Z` builde `medirappel:X.Y.Z` et `:latest`, puis crée le tag git `vX.Y.Z`
+seulement si le build réussit (arbre propre exigé). La version vient du tag, pas de `pyproject.toml`.
 
 ---
 

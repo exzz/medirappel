@@ -20,6 +20,7 @@ PRACTITIONER = {
 class FakeTrophy:
     def __init__(self):
         self.appointments = []
+        self.patients = []  # newest first, like the API
         self.holidays = [{"date": "2026-11-11", "libelle": "Armistice"}]
         self.calls = 0
 
@@ -30,6 +31,10 @@ class FakeTrophy:
             return httpx.Response(200, json=[PRACTITIONER])
         if request.url.path == "/holidays":
             return httpx.Response(200, json=self.holidays)
+        if request.url.path == "/patients":
+            q = request.url.params
+            start = int(q["offset"])
+            return httpx.Response(200, json=self.patients[start:start + int(q["limit"])])
         if request.url.path == "/appointments":
             q = request.url.params
             day = lambda a: a["debut"][:10]  # noqa: E731

@@ -2,6 +2,7 @@
   "reminder_days_before": 1,
   "send_time": "09:00",
   "send_deadline": "20:00",
+  "auto_send": true,
   "practice": {
     "name": "Cabinet dentaire du Parc",
     "address": "12 rue des Lilas, 75000 Paris",

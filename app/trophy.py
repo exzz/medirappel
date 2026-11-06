@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from datetime import date
 
@@ -15,9 +16,20 @@ import httpx
 
 from . import config, db
 
+log = logging.getLogger(__name__)
 _lock = asyncio.Lock()
 # Replaced by tests with an httpx.MockTransport.
 transport: httpx.AsyncBaseTransport | None = None
+
+
+async def _fetch(path: str, params: dict):
+    cfg = config.trophy()
+    async with _lock:
+        async with httpx.AsyncClient(base_url=cfg["url"], timeout=30, transport=transport,
+                                     headers={"X-API-Key": cfg["api_key"]}) as client:
+            resp = await client.get(path, params=params)
+        resp.raise_for_status()
+        return resp.json()
 
 
 async def _get(endpoint: str, params: dict, ttl: int, force: bool = False):
@@ -30,12 +42,7 @@ async def _get(endpoint: str, params: dict, ttl: int, force: bool = False):
             row = conn.execute("SELECT fetched_at, body FROM api_cache WHERE key = ?", (key,)).fetchone()
             if row and time.time() - row["fetched_at"] < ttl:
                 return json.loads(row["body"])
-        async with _lock:
-            async with httpx.AsyncClient(base_url=cfg["url"], timeout=30, transport=transport,
-                                         headers={"X-API-Key": cfg["api_key"]}) as client:
-                resp = await client.get(path, params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        data = await _fetch(path, params)
         conn.execute("INSERT OR REPLACE INTO api_cache (key, fetched_at, body) VALUES (?, ?, ?)",
                      (key, time.time(), json.dumps(data)))
         return data
@@ -71,3 +78,46 @@ async def appointments(practitioner_id: int, start: date, end: date, force: bool
 
 def purge_cache(conn, older_than_s: int) -> None:
     conn.execute("DELETE FROM api_cache WHERE fetched_at < ?", (time.time() - older_than_s,))
+
+
+# --------------------------------------------------------------- patients
+# /patients pages by 500, newest first: one full load a day (catches edits and
+# archivings), otherwise the first page alone, merged, brings the new patients.
+PAGE = 500
+FULL_EVERY_S = 86400
+_refreshing = False
+
+
+def cached_patients(conn) -> list[dict]:
+    row = conn.execute("SELECT body FROM api_cache WHERE key = 'patients'").fetchone()
+    return list(json.loads(row["body"])["patients"].values()) if row else []
+
+
+async def refresh_patients() -> None:
+    """Never raises: on error the old list stays (search serves the cache)."""
+    global _refreshing
+    if _refreshing:
+        return
+    _refreshing = True
+    conn = db.connect()
+    try:
+        row = conn.execute("SELECT body FROM api_cache WHERE key = 'patients'").fetchone()
+        old = json.loads(row["body"]) if row else None
+        full = not old or time.time() - old["full_at"] > FULL_EVERY_S
+        found = {}
+        for n in range(1000 if full else 1):
+            page = await _fetch(config.trophy()["endpoints"]["patients"], {"limit": PAGE, "offset": n * PAGE})
+            found.update({str(p["id"]): {k: p.get(k) for k in ("id", "nom", "prenom", "naissance", "mobile", "tel")}
+                          for p in page})
+            if len(page) < PAGE:
+                break
+        data = ({"full_at": time.time(), "patients": found} if full
+                else {**old, "patients": {**old["patients"], **found}})
+        conn.execute("INSERT OR REPLACE INTO api_cache (key, fetched_at, body) VALUES ('patients', ?, ?)",
+                     (time.time(), json.dumps(data)))
+        log.info("patients %s: %d read, %d cached", "full load" if full else "update", len(found), len(data["patients"]))
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        log.warning("patients refresh failed (%s), cache kept", type(exc).__name__)
+    finally:
+        _refreshing = False
+        conn.close()

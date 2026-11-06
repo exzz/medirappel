@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import logging.handlers
 import os
+import socket
 import sqlite3
+import time
+import unicodedata
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 
+import httpx
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, config, db, journal, planner, scheduler, smsgate
+from . import auth, config, db, journal, planner, scheduler, smsgate, trophy
 from .config import BASE_DIR
 from .planner import iso, mask
 
@@ -70,6 +75,8 @@ async def lifespan(app: FastAPI):
     sample = planner.render("Dr Prenom-Compose Nom-Compose", planner.now().replace(month=9, day=30, hour=10))
     if len(sample) > 160:
         log.warning("sms_template renders to %d chars (> 160): it will cost 2 SMS", len(sample))
+    if not config.settings()["auto_send"]:
+        log.warning("auto_send is false: planned SMS are NOT sent automatically")
     task = None if os.environ.get("MEDIRAPPEL_NO_SCHEDULER") else asyncio.create_task(scheduler.run())
     yield
     if task:
@@ -226,7 +233,7 @@ async def day_page(request: Request, day: str | None = None, practitioner: int |
         "timeline": timeline, "current": current,
         "current_label": f"{LONG_DAYS[current.weekday()]} {current.day} {LONG_MONTHS[current.month - 1]}",
         "past": current < today, "now": iso(planner.now()), "warning": warning,
-        "refreshed": refresh == "ok",
+        "refreshed": refresh == "ok", "auto_send": config.settings()["auto_send"],
         "optout": {r[0] for r in conn.execute("SELECT patient_id FROM optout")},
     })
 
@@ -356,9 +363,46 @@ def _message_page(request, user, **ctx):
         "user": user, "simulation": g.get("simulation"), "test_number": g.get("test_number"), **ctx})
 
 
+_tasks = set()  # keep background tasks referenced until they end
+
+
 @app.get("/message", response_class=HTMLResponse)
-def message_page(request: Request, conn=Depends(get_conn)):
-    return _message_page(request, require_user(request, conn))
+async def message_page(request: Request, conn=Depends(get_conn)):
+    user = require_user(request, conn)
+    # The page never waits for Trophy: the search serves the cache, refreshed meanwhile.
+    task = asyncio.get_running_loop().create_task(trophy.refresh_patients())
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return _message_page(request, user)
+
+
+def _fold(text: str) -> str:
+    return " ".join(unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode().casefold().split())
+
+
+@app.get("/message/patients")
+def search_patients(request: Request, q: str = "", conn=Depends(get_conn)):
+    """Up to 10 cached patients whose name holds every typed word, surname matches first."""
+    require_user(request, conn)
+    words = _fold(q).split()
+    if not words:
+        return []
+    hits = []
+    for p in trophy.cached_patients(conn):
+        key = _fold(f"{p['nom'] or ''} {p['prenom'] or ''}")
+        if all(w in key for w in words):
+            hits.append((not key.startswith(words[0]), key, p))
+    out = []
+    for _, _, p in sorted(hits, key=lambda h: h[:2])[:10]:
+        born = p["naissance"]
+        number = planner.french_mobile(p["mobile"]) or planner.french_mobile(p["tel"])
+        out.append({
+            # Birth date tells namesakes apart (as in Sterilog); the id keeps labels unique.
+            "label": " ".join(x for x in ((p["nom"] or "").upper(), p["prenom"]) if x)
+                     + (f" · né(e) le {born[8:10]}/{born[5:7]}/{born[:4]}" if born else "") + f" · n° {p['id']}",
+            "phone": "0" + number[3:] if number else None,
+        })
+    return out
 
 
 @app.post("/message", response_class=HTMLResponse)
@@ -381,3 +425,69 @@ async def send_message(request: Request, phone: str = Form(...), text: str = For
                    data={"chars": len(body), "gateway_id": gid})
     log.info("free SMS handed to SMSGate for %s by %s", mask(number), user["login"])
     return _message_page(request, user, sent=mask(number))
+
+
+# ------------------------------------------------------------- diagnostic
+
+async def _check(name, probe):
+    """(name, ok, detail): ok is True, False, or None when it cannot be checked here."""
+    try:
+        ok, detail = await probe()
+    except httpx.HTTPStatusError as exc:
+        ok, detail = False, f"réponse HTTP {exc.response.status_code}"
+    except Exception as exc:  # any failure is a red line, never a crash of the page
+        ok, detail = False, f"injoignable ({type(exc).__name__})"
+    return name, ok, detail
+
+
+TAILNET = ipaddress.ip_network("100.64.0.0/10")
+
+
+async def _tailscale_out():
+    """Works when Tailscale runs in another container sharing our network (sidecar):
+    no CLI needed, only the route to the tailnet and tailscaled's own address."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("100.100.100.100", 53))  # UDP connect sends nothing: it only picks the route
+        own = s.getsockname()[0]
+    if ipaddress.ip_address(own) not in TAILNET:
+        return False, f"pas d'adresse Tailscale ici (sortie par {own}) : conteneur Tailscale arrêté ou réseau non partagé"
+    _, writer = await asyncio.wait_for(asyncio.open_connection("100.100.100.100", 53), 3)
+    writer.close()
+    return True, f"adresse {own}, Tailscale répond"
+
+
+async def _trophy():
+    t0 = time.monotonic()
+    today = date.today().isoformat()
+    # A real query (HFSQL + API key), outside the cache.
+    await trophy._fetch(config.trophy()["endpoints"]["holidays"], {"from": today, "to": today})
+    return True, f"requête de test réussie en {(time.monotonic() - t0) * 1000:.0f} ms"
+
+
+async def _smsgate():
+    g = config.settings()["smsgate"]
+    note = " (mode simulation : les SMS ne passent pas encore par lui)" if g.get("simulation") else ""
+    t0 = time.monotonic()
+    async with smsgate._client() as c:
+        r = await c.get("/health")  # shortcut: /health from the SMSGate docs, check on the real phone
+    if r.status_code == 401:
+        return False, "identifiants refusés" + note
+    r.raise_for_status()
+    status = r.json().get("status")
+    return status == "pass", f"état {status}, {(time.monotonic() - t0) * 1000:.0f} ms" + note
+
+
+@app.get("/diagnostic", response_class=HTMLResponse)
+async def diagnostic(request: Request, conn=Depends(get_conn)):
+    user = require_user(request, conn)
+    ip = _ip(request)
+    try:
+        inbound = ipaddress.ip_address(ip) in TAILNET
+    except ValueError:
+        inbound = False
+    checks = [("Tailscale entrant", True if inbound else None,
+               f"cette page arrive par Tailscale ({ip})" if inbound
+               else f"cette page n'arrive pas par Tailscale ({ip or 'adresse inconnue'}) : non vérifiable d'ici")]
+    checks += await asyncio.gather(_check("Tailscale sortant", _tailscale_out), _check("API Trophy", _trophy),
+                                   _check("SMSGate (téléphone)", _smsgate))
+    return templates.TemplateResponse(request, "diagnostic.html", {"user": user, "checks": checks})

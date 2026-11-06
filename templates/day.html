@@ -47,6 +47,7 @@
     </div>
   </div>
 
+  {% if not auto_send and not past %}<p class="notice bad">Envoi automatique désactivé (<code>auto_send</code> dans <code>settings.json</code>) : les SMS planifiés ne partiront pas d'eux-mêmes.</p>{% endif %}
   {% if warning %}<p class="notice bad">{{ warning }}</p>{% endif %}
   {% if refreshed %}<p class="notice">Planning à venir rechargé depuis le logiciel du cabinet.</p>{% endif %}
 

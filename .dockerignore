@@ -1,0 +1,11 @@
+# Seuls l'application et ses dépendances entrent dans l'image.
+# Jamais de secrets (settings.json, users.json, trophy-api.json), ni data/, ni venv.
+*
+!pyproject.toml
+!uv.lock
+!app/
+!templates/
+!static/
+!medirappel.py
+**/__pycache__
+**/*.pyc

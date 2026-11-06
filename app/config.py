@@ -19,6 +19,7 @@ DEFAULTS = {
     "reminder_days_before": 1,
     "send_time": "09:00",
     "send_deadline": "20:00",
+    "auto_send": True,
     "excluded_appointment_types": [],
     "throttle": {"min_delay_s": 60, "max_delay_s": 90},
     "retry_delay_minutes": 60,
@@ -65,6 +66,8 @@ def settings() -> dict:
         raise ConfigError("settings.json: smsgate.url, username and password are required outside simulation.")
     if not isinstance(s["reminder_days_before"], int) or s["reminder_days_before"] < 0:
         raise ConfigError("settings.json: reminder_days_before must be a positive integer.")
+    if not isinstance(s["auto_send"], bool):
+        raise ConfigError("settings.json: auto_send must be true or false.")
     s["send_time"] = _hhmm(s["send_time"], "send_time")
     s["send_deadline"] = _hhmm(s["send_deadline"], "send_deadline")
     t = s["throttle"]
@@ -84,6 +87,7 @@ def trophy() -> dict:
         "practitioners": "/practitioners",
         "appointments": "/appointments",
         "holidays": "/holidays",
+        "patients": "/patients",
         **t["endpoints"],
     }
     return t

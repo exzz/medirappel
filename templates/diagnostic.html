@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Diagnostic — MediRappel{% endblock %}
+{% block body %}
+<main class="wrap narrow">
+  <p><a href="/">&larr; Retour au planning</a></p>
+  <h1>Diagnostic</h1>
+  <p class="sub">État des services dont dépend MediRappel, vérifié à l'ouverture de la page.</p>
+  <ul class="checks">
+    {% for name, ok, detail in checks %}
+    <li class="{{ 'ok' if ok else 'ko' if ok is false else 'na' }}">
+      <span class="mark" aria-hidden="true">{{ '✓' if ok else '✗' if ok is false else '–' }}</span>
+      <span><strong>{{ name }}</strong> <span class="sr">{{ 'OK' if ok else 'en échec' if ok is false else 'non vérifiable' }}</span><br>
+      <span class="hint">{{ detail }}</span></span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p><a href="/diagnostic">Relancer les vérifications</a></p>
+</main>
+{% endblock %}

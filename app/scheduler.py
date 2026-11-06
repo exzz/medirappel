@@ -66,9 +66,9 @@ def _due(conn):
 async def send_due(conn) -> None:
     s = config.settings()
     today = planner.now().date()
-    due = _due(conn)
-    if not due:
-        return
+    # auto_send off: only manual retries (attempts > 0) leave; the rest waits as during a stop.
+    paused = not s["auto_send"]
+    due = [r for r in _due(conn) if r["attempts"] or not paused]
     # Re-read the agenda first: a cancelled appointment nobody looked at must not get its SMS.
     names = {p["practitioner_id"]: p["name"] for p in planner.managed_practitioners(conn)}
     for pid, day in {(r["practitioner_id"], r["appointment_at"][:10]) for r in due}:
@@ -90,6 +90,8 @@ async def send_due(conn) -> None:
             conn.execute("UPDATE reminder SET status = 'missed', updated_at = ? WHERE id = ?",
                          (iso(planner.now()), r["id"]))
             log.warning("SMS reminder %s missed (was due %s)", r["id"], r["send_at"])
+            continue
+        if paused and not r["attempts"]:
             continue
         if not first:
             await asyncio.sleep(random.uniform(s["throttle"]["min_delay_s"], s["throttle"]["max_delay_s"]))

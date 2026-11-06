@@ -19,6 +19,7 @@
   </div>
 </header>
 {% block body %}{% endblock %}
+{% if user %}<footer class="foot"><a href="/diagnostic">Diagnostic</a></footer>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

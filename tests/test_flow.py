@@ -5,7 +5,9 @@ from datetime import datetime
 
 from fastapi.testclient import TestClient
 
-from app import planner, scheduler, smsgate
+import httpx
+
+from app import config, main, planner, scheduler, smsgate, trophy
 from tests.conftest import appt
 
 
@@ -246,3 +248,50 @@ def test_free_message(env, clock, caplog):
     row = conn.execute("SELECT data FROM journal WHERE action = 'message.send'").fetchone()
     assert row and "98765432" not in row["data"] and "15h" not in row["data"]
     assert "06 98 76 54 32" not in caplog.text and "+33698765432" not in caplog.text
+
+
+def test_patient_picker_full_then_first_page(env, clock, monkeypatch):
+    fake, conn = env
+    monkeypatch.setattr(trophy, "PAGE", 2)
+    pat = lambda i, nom, prenom, born=None, mobile="": {  # noqa: E731
+        "id": i, "nom": nom, "prenom": prenom, "naissance": born, "mobile": mobile, "tel": ""}
+    fake.patients = [pat(3, "Martin", "Léa", "1980-03-12", "06 11 22 33 44"), pat(2, "MARTIN", "Lea", "1975-01-02"),
+                     pat(1, "Dupont", "Jean", None, "0612345678")]
+    run(trophy.refresh_patients())  # no cache: full load, 2 pages
+    fake.patients.insert(0, pat(4, "Lemartin", "Zoé"))
+    calls = fake.calls
+    run(trophy.refresh_patients())  # cached: first page only
+    assert fake.calls == calls + 1
+    with TestClient(scheduler_app()) as client:
+        login(client)
+        hits = client.get("/message/patients", params={"q": "martin lea"}).json()
+        assert [h["phone"] for h in hits] == ["0611223344", None]
+        assert "né(e) le 12/03/1980" in hits[0]["label"]
+        assert client.get("/message/patients", params={"q": "martin"}).json()[-1]["label"].startswith("LEMARTIN")
+
+
+def test_diagnostic(env, clock, monkeypatch):
+    async def no_tailnet():
+        return None, "test"
+    monkeypatch.setattr(main, "_tailscale_out", no_tailnet)
+    monkeypatch.setattr(smsgate, "transport", httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"status": "pass"}) if r.url.path == "/health" else httpx.Response(404)))
+    with TestClient(scheduler_app()) as client:
+        login(client)
+        assert 'href="/diagnostic"' in client.get("/message").text
+        html = client.get("/diagnostic").text
+    assert html.count('class="ok"') == 2 and "requête de test réussie" in html and "état pass" in html
+
+
+def test_auto_send_off_keeps_planned_but_sends_manual_retry(env, clock):
+    fake, conn = env
+    fake.appointments = [appt(1, "2026-11-10T10:00"), appt(2, "2026-11-10T11:00")]
+    config.settings()["auto_send"] = False  # cache cleared by the fixture
+    run(scheduler.plan_and_send(conn))
+    conn.execute("UPDATE reminder SET status = 'planned', attempts = 1 WHERE appointment_id = 2")  # « Relancer »
+    clock["now"] = datetime(2026, 11, 9, 9, 0)
+    run(scheduler.send_due(conn))
+    assert rows(conn)[1]["status"] == "planned" and rows(conn)[2]["status"] == "submitted"
+    clock["now"] = datetime(2026, 11, 9, 20, 30)
+    run(scheduler.send_due(conn))
+    assert rows(conn)[1]["status"] == "missed"
