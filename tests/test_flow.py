@@ -266,8 +266,9 @@ def test_patient_picker_full_then_first_page(env, clock, monkeypatch):
         login(client)
         hits = client.get("/message/patients", params={"q": "martin lea"}).json()
         assert [h["phone"] for h in hits] == ["0611223344", None]
-        assert "né(e) le 12/03/1980" in hits[0]["label"]
-        assert client.get("/message/patients", params={"q": "martin"}).json()[-1]["label"].startswith("LEMARTIN")
+        assert hits[0]["name"] == "MARTIN Léa" and hits[0]["detail"] == "né(e) le 12/03/1980"
+        assert hits[1]["detail"].endswith("pas de mobile")
+        assert client.get("/message/patients", params={"q": "martin"}).json()[-1]["name"] == "LEMARTIN Zoé"
 
 
 def test_diagnostic(env, clock, monkeypatch):
@@ -280,6 +281,7 @@ def test_diagnostic(env, clock, monkeypatch):
         login(client)
         assert 'href="/diagnostic"' in client.get("/message").text
         html = client.get("/diagnostic").text
+        assert "Mode simulation" in client.get("/?day=2026-11-10").text  # settings.example: simulation on
     assert html.count('class="ok"') == 2 and "requête de test réussie" in html and "état pass" in html
 
 

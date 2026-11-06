@@ -48,6 +48,8 @@
   </div>
 
   {% if not auto_send and not past %}<p class="notice bad">Envoi automatique désactivé (<code>auto_send</code> dans <code>settings.json</code>) : les SMS planifiés ne partiront pas d'eux-mêmes.</p>{% endif %}
+  {% if gate.get('simulation') %}<p class="notice bad">Mode simulation (<code>smsgate.simulation</code>) : aucun SMS ne part réellement, les statuts sont simulés.</p>{% endif %}
+  {% if gate.get('test_number') %}<p class="notice bad">Mode essai (<code>smsgate.test_number</code>) : tous les SMS partent vers le numéro de test, pas vers les patients.</p>{% endif %}
   {% if warning %}<p class="notice bad">{{ warning }}</p>{% endif %}
   {% if refreshed %}<p class="notice">Planning à venir rechargé depuis le logiciel du cabinet.</p>{% endif %}
 

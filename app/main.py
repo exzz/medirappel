@@ -85,7 +85,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
-templates.env.globals.update(status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
+templates.env.globals.update(css_v=int((BASE_DIR / "static" / "app.css").stat().st_mtime), status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
 
 
 @app.middleware("http")
@@ -233,6 +233,7 @@ async def day_page(request: Request, day: str | None = None, practitioner: int |
         "current_label": f"{LONG_DAYS[current.weekday()]} {current.day} {LONG_MONTHS[current.month - 1]}",
         "past": current < today, "now": iso(planner.now()), "warning": warning,
         "refreshed": refresh == "ok", "auto_send": config.settings()["auto_send"],
+        "gate": config.settings()["smsgate"],
         "optout": {r[0] for r in conn.execute("SELECT patient_id FROM optout")},
     })
 
@@ -396,9 +397,10 @@ def search_patients(request: Request, q: str = "", conn=Depends(get_conn)):
         born = p["naissance"]
         number = planner.french_mobile(p["mobile"]) or planner.french_mobile(p["tel"])
         out.append({
-            # Birth date tells namesakes apart (as in Sterilog); the id keeps labels unique.
-            "label": " ".join(x for x in ((p["nom"] or "").upper(), p["prenom"]) if x)
-                     + (f" · né(e) le {born[8:10]}/{born[5:7]}/{born[:4]}" if born else "") + f" · n° {p['id']}",
+            "name": " ".join(x for x in ((p["nom"] or "").upper(), p["prenom"]) if x),
+            # Birth date tells namesakes apart (as in Sterilog).
+            "detail": " · ".join(([f"né(e) le {born[8:10]}/{born[5:7]}/{born[:4]}"] if born else [])
+                                 + ([] if number else ["pas de mobile"])),
             "phone": "0" + number[3:] if number else None,
         })
     return out
@@ -439,7 +441,7 @@ async def _check(name, probe):
     return name, ok, detail
 
 
-TAILNET = ipaddress.ip_network("100.64.0.0/10")
+TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
 
 
 async def _tailscale_out():
@@ -479,7 +481,7 @@ async def diagnostic(request: Request, conn=Depends(get_conn)):
     user = require_user(request, conn)
     ip = _ip(request)
     try:
-        inbound = ipaddress.ip_address(ip) in TAILNET
+        inbound = any(ipaddress.ip_address(ip) in net for net in TAILNET)
     except ValueError:
         inbound = False
     checks = [("Tailscale entrant", True if inbound else None,

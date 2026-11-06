@@ -137,11 +137,15 @@ select { min-height: var(--target); font: inherit; padding: 0 .75rem; border: 1p
        color: #fff; background: var(--primary-dark); border: 1px solid var(--primary-dark); border-radius: var(--r); }
 .btn.ghost { color: var(--primary-dark); background: var(--paper); }
 a.btn { display: inline-flex; align-items: center; text-decoration: none; }
-.free { display: grid; gap: .4rem; }
-.free label { color: var(--muted); font-size: var(--t-detail); margin-top: .5rem; }
-.free input, .free textarea { font: inherit; padding: .5rem .75rem; border: 1px solid var(--line);
-                              border-radius: var(--r); background: var(--paper); color: var(--ink); }
-.free .btn { justify-self: start; margin-top: .75rem; }
+/* Form fields: Sterilog's rules, same metrics. */
+.free label { display: block; font-size: var(--t-detail); color: var(--muted); margin: .9rem 0 .3rem; }
+.free label:first-of-type { margin-top: 0; }
+.free input, .free textarea { width: 100%; min-height: var(--target); padding: .6rem .75rem; font: inherit;
+                              color: var(--ink); background: var(--paper); border: 1px solid var(--line);
+                              border-radius: var(--r); }
+.free textarea { min-height: 5rem; resize: vertical; }
+.free .btn { margin-top: 1.25rem; }
+.free .hint { margin-top: .3rem; }
 .btn.ghost-bad { color: var(--alert); background: var(--paper); border-color: var(--alert); }
 .btn.ghost-muted { color: var(--muted); background: var(--paper); border-color: var(--line); }
 
@@ -192,3 +196,14 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .checks .ko .mark { background: var(--alert); }
 .foot { text-align: center; margin-top: 2.5rem; font-size: var(--t-detail); }
 .foot a { color: var(--muted); }
+/* Patient suggestions: Sterilog's rules (.champ-recherche, .suggestions), over what follows. */
+.search { position: relative; }
+.suggestions { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; margin-top: .3rem;
+               background: var(--paper); border: 1px solid var(--line); border-radius: var(--r);
+               box-shadow: 0 6px 18px rgba(20, 32, 42, .12); overflow: hidden; }
+.suggestions button { display: block; width: 100%; min-height: var(--target); padding: .5rem .9rem; font: inherit;
+                      text-align: left; background: var(--paper); color: var(--ink); border: 0;
+                      border-bottom: 1px solid var(--line); cursor: pointer; }
+.suggestions button:last-child { border-bottom: 0; }
+.suggestions button:hover, .suggestions button:focus-visible { background: var(--primary-light); }
+.suggestions button span { display: block; font-size: var(--t-detail); color: var(--muted); }

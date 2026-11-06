@@ -122,6 +122,8 @@ planification continue (tableau, relectures) mais l'ordonnanceur n'envoie plus r
 lui-même, comme un service arrêté : rattrapage jusqu'à `send_deadline` si on le
 réactive, `missed` ensuite. Restent possibles : « Envoyer maintenant », « Relancer » et
 « Envoyer un message ». Bandeau d'avertissement sur les jours non passés, avertissement au démarrage.
+Bandeaux rouges aussi sur la page principale (tous les jours) pour `smsgate.simulation` et
+`smsgate.test_number` (demande de l'utilisateur).
 
 ### Débit d'envoi
 
@@ -308,7 +310,7 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   récents d'abord) et la fusionne. La recherche ne lit que le cache.
 - Lien **« Diagnostic »** en pied de page (simple lien, demande de l'utilisateur) : page
   `/diagnostic`, une ligne par service, ✓ vert, ✗ rouge avec la raison, ou « – » si non
-  vérifiable : Tailscale entrant (la page arrive-t-elle d'une adresse 100.64.0.0/10),
+  vérifiable : Tailscale entrant (la page arrive-t-elle d'une adresse 100.64.0.0/10 ou fd7a:115c:a1e0::/48),
   Tailscale sortant (`100.100.100.100:53` qui répond, sans commande `tailscale` : Tailscale
   tourne sur l'hôte et les conteneurs joignent le tailnet par son routage), API Trophy (vraie requête
   `/holidays` du jour, hors cache), SMSGate (`GET /health`, sans envoi). Tous les rôles.

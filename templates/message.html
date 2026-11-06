@@ -10,12 +10,14 @@
   {% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
   {% if sent %}<p class="notice">SMS transmis au téléphone pour {{ sent }}.</p>{% endif %}
   <form method="post" action="/message" class="free">
-    <label for="patient">Patient <span class="hint">(facultatif : remplit le mobile)</span></label>
-    <input id="patient" type="search" list="patients" autocomplete="off" placeholder="Nom ou prénom">
-    <datalist id="patients"></datalist>
+    <label for="patient">Patient</label>
+    <div class="search">
+      <input id="patient" type="text" autocomplete="off" placeholder="Nom du patient" data-1p-ignore data-lpignore="true" data-bwignore>
+      <div class="suggestions" id="suggestions" hidden></div>
+    </div>
     <p id="nomobile" class="hint" hidden>Ce patient n'a pas de mobile français dans le logiciel du cabinet.</p>
     <label for="phone">Mobile</label>
-    <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="off" required
+    <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="off" required data-1p-ignore data-lpignore="true" data-bwignore
            placeholder="06 12 34 56 78" value="{{ phone or '' }}">
     <label for="text">Message</label>
     <textarea id="text" name="text" rows="5" maxlength="160" required>{{ text or '' }}</textarea>
@@ -25,23 +27,40 @@
 {% endblock %}
 {% block scripts %}
 <script>
-const pick = document.getElementById('patient'), list = document.getElementById('patients'),
+// Own suggestion list, as in Sterilog: <datalist> filled on the fly is unreliable (mobile above all).
+const pick = document.getElementById('patient'), box = document.getElementById('suggestions'),
       phone = document.getElementById('phone'), nomobile = document.getElementById('nomobile');
-let found = new Map(), timer;
+let timer, seq = 0;
 pick.addEventListener('input', () => {
-  if (found.has(pick.value)) {  // a suggestion was chosen
-    const p = found.get(pick.value);
-    nomobile.hidden = !!p.phone;
-    phone.value = p.phone ? p.phone.replace(/(\d\d)(?=\d)/g, '$1 ') : '';
-    return;
-  }
   clearTimeout(timer);
+  const q = pick.value.trim();
+  if (q.length < 2) { box.hidden = true; box.replaceChildren(); return; }
   timer = setTimeout(async () => {
-    const r = await fetch('/message/patients?q=' + encodeURIComponent(pick.value));
-    if (!r.ok) return;
-    found = new Map((await r.json()).map(p => [p.label, p]));
-    list.replaceChildren(...[...found.keys()].map(l => new Option(l)));
+    const mine = ++seq;
+    try {
+      const r = await fetch('/message/patients?q=' + encodeURIComponent(q));
+      const hits = await r.json();
+      if (mine !== seq) return;  // a later keystroke already answered
+      box.replaceChildren(...hits.map(p => {
+        const b = document.createElement('button'), d = document.createElement('span');
+        b.type = 'button';
+        b.textContent = p.name;
+        d.textContent = p.detail;
+        b.append(d);
+        b.addEventListener('click', () => choose(p));
+        return b;
+      }));
+      box.hidden = !hits.length;
+    } catch (e) { /* no network: typing the number by hand still works */ }
   }, 200);
 });
+function choose(p) {
+  pick.value = p.name;
+  box.hidden = true;
+  nomobile.hidden = !!p.phone;
+  phone.value = p.phone ? p.phone.replace(/(\d\d)(?=\d)/g, '$1 ') : '';
+  (p.phone ? document.getElementById('text') : phone).focus();
+}
+document.addEventListener('click', e => { if (!e.target.closest('.search')) box.hidden = true; });
 </script>
 {% endblock %}
