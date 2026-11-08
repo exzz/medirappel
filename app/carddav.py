@@ -55,6 +55,9 @@ def _vcard(p: dict, phone: str) -> str:
                         f"TEL;TYPE=CELL:{phone}", "END:VCARD", ""])
 
 
+_books: dict[int, tuple[list, dict]] = {}
+
+
 def _book(pid: int) -> dict[str, str] | None:
     """{'<patient id>.vcf': vcard} for this practitioner; None when the cache is empty
     (answering an empty book would make DAVx⁵ delete every contact on the phone)."""
@@ -65,11 +68,14 @@ def _book(pid: int) -> dict[str, str] | None:
         conn.close()
     if not patients:
         return None
+    if pid in _books and _books[pid][0] is patients:  # same parsed list: the book has not changed
+        return _books[pid][1]
     book = {}
     for p in patients:
         phone = planner.french_mobile(p["mobile"]) or planner.french_mobile(p["tel"])
         if p.get("praticien_id") == pid and phone:
             book[f"{p['id']}.vcf"] = _vcard(p, phone)
+    _books[pid] = (patients, book)
     return book
 
 

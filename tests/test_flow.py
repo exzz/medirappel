@@ -264,11 +264,11 @@ def test_patient_picker_full_then_first_page(env, clock, monkeypatch):
     assert fake.calls == calls + 1
     with TestClient(scheduler_app()) as client:
         login(client)
-        hits = client.get("/message/patients", params={"q": "martin lea"}).json()
+        hits = client.post("/message/patients", data={"q": "martin lea"}).json()
         assert [h["phone"] for h in hits] == ["0611223344", None]
         assert hits[0]["name"] == "MARTIN Léa" and hits[0]["detail"] == "né(e) le 12/03/1980"
         assert hits[1]["detail"].endswith("pas de mobile")
-        assert client.get("/message/patients", params={"q": "martin"}).json()[-1]["name"] == "LEMARTIN Zoé"
+        assert client.post("/message/patients", data={"q": "martin"}).json()[-1]["name"] == "LEMARTIN Zoé"
 
 
 def test_diagnostic(env, clock, monkeypatch):
@@ -321,3 +321,29 @@ def test_carddav_book_per_practitioner(env, clock):
         assert dav("PUT", "/carddav/1/9.vcf", content="x").status_code == 403
         assert dav("PROPFIND", "/carddav/2/").status_code == 207  # Dr Autre has an account
         assert dav("PROPFIND", "/carddav/99/").status_code == 404
+
+
+def test_retry_refused_once_the_appointment_is_past(env, clock):
+    fake, conn = env
+    fake.appointments = [appt(1, "2026-11-10T10:00")]
+    run(scheduler.plan_and_send(conn))
+    conn.execute("UPDATE reminder SET status = 'failed'")
+    rid = rows(conn)[1]["id"]
+    clock["now"] = datetime(2026, 11, 10, 11, 0)  # appointment over
+    with TestClient(scheduler_app()) as client:
+        login(client)
+        assert "Relancer" not in client.get("/?day=2026-11-10").text
+        client.post(f"/reminder/{rid}/retry")
+    assert rows(conn)[1]["status"] == "failed"
+
+
+def test_poll_states_skips_an_unknown_message(env, clock, monkeypatch):
+    fake, conn = env
+    fake.appointments = [appt(1, "2026-11-10T10:00"), appt(2, "2026-11-10T11:00")]
+    run(scheduler.plan_and_send(conn))
+    conn.execute("UPDATE reminder SET status = 'submitted', sent_at = '2026-11-09T09:00',"
+                 " gateway_id = 'g' || appointment_id")
+    monkeypatch.setattr(smsgate, "transport", httpx.MockTransport(
+        lambda r: httpx.Response(404) if r.url.path == "/message/g1" else httpx.Response(200, json={"state": "Delivered"})))
+    run(scheduler.poll_states(conn))
+    assert (rows(conn)[1]["status"], rows(conn)[2]["status"]) == ("submitted", "delivered")

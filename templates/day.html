@@ -84,7 +84,7 @@
         <form method="post" action="/reminder/{{ r['id'] }}/restore"><button class="btn ghost">Rétablir</button></form>
         {% elif r['status'] == 'skipped' and r['reason'] == late and r['appointment_at'] > now %}
         <form method="post" action="/reminder/{{ r['id'] }}/send"><button class="btn">Envoyer maintenant</button></form>
-        {% elif r['status'] == 'failed' %}
+        {% elif r['status'] == 'failed' and r['appointment_at'] > now %}
         <form method="post" action="/reminder/{{ r['id'] }}/retry"><button class="btn">Relancer</button></form>
         {% endif %}
       </td>

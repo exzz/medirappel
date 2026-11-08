@@ -17,9 +17,6 @@ from .planner import mask
 log = logging.getLogger(__name__)
 transport: httpx.AsyncBaseTransport | None = None  # tests
 
-FINAL = {"Delivered": "delivered", "Failed": "failed"}
-
-
 def _client() -> httpx.AsyncClient:
     g = config.settings()["smsgate"]
     return httpx.AsyncClient(base_url=g["url"].rstrip("/"), auth=(g["username"], g["password"]),
@@ -33,11 +30,17 @@ async def send(phone: str, text: str) -> str:
     if g.get("simulation"):
         log.info("simulation: SMS to %s (%d chars)", mask(phone), len(text))
         return "sim-" + uuid.uuid4().hex
+    # Our own id: once the phone said yes, nothing below may raise (a raise means a second SMS).
+    # shortcut: a timeout after the phone accepted still leads to a retry (2nd SMS); rare on Tailscale.
+    gid = uuid.uuid4().hex
     async with _client() as c:
-        r = await c.post("/message", json={"textMessage": {"text": text}, "phoneNumbers": [phone],
+        r = await c.post("/message", json={"id": gid, "textMessage": {"text": text}, "phoneNumbers": [phone],
                                           "withDeliveryReport": True})
     r.raise_for_status()
-    return r.json()["id"]
+    try:
+        return r.json().get("id") or gid
+    except (ValueError, AttributeError):
+        return gid
 
 
 async def state(gateway_id: str) -> str:

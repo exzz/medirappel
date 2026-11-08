@@ -14,6 +14,8 @@ import logging
 import random
 from datetime import date, datetime, timedelta
 
+import httpx
+
 from . import config, db, planner, smsgate, trophy
 from .planner import iso, mask
 
@@ -126,9 +128,12 @@ async def poll_states(conn) -> None:
     for r in rows:
         try:
             st = await smsgate.state(r["gateway_id"])
-        except Exception as exc:
-            log.warning("SMSGate state of %s unavailable: %s", r["id"], exc)
+        except httpx.TransportError as exc:
+            log.warning("SMSGate unreachable for state of %s: %s", r["id"], exc)
             return  # phone unreachable: try again next tick
+        except Exception as exc:  # e.g. 404 for a message the phone forgot: the others still count
+            log.warning("SMSGate state of %s unavailable: %s", r["id"], exc)
+            continue
         if st == "Failed":
             fail(conn, r["id"], r["attempts"], "SMSGate: Failed")
         elif st in ("Sent", "Delivered"):

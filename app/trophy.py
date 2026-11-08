@@ -88,9 +88,19 @@ FULL_EVERY_S = 86400
 _refreshing = False
 
 
+_patients_memo: tuple[float, list[dict]] = (0.0, [])
+
+
 def cached_patients(conn) -> list[dict]:
-    row = conn.execute("SELECT body FROM api_cache WHERE key = 'patients'").fetchone()
-    return list(json.loads(row["body"])["patients"].values()) if row else []
+    """Parsed once per cache write (2.4 MB of JSON, read on every search and CardDAV call). Read-only."""
+    global _patients_memo
+    row = conn.execute("SELECT fetched_at FROM api_cache WHERE key = 'patients'").fetchone()
+    if not row:
+        return []
+    if _patients_memo[0] != row["fetched_at"]:
+        body = conn.execute("SELECT body FROM api_cache WHERE key = 'patients'").fetchone()["body"]
+        _patients_memo = (row["fetched_at"], list(json.loads(body)["patients"].values()))
+    return _patients_memo[1]
 
 
 async def refresh_patients() -> None:

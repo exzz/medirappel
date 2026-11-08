@@ -305,8 +305,8 @@ def retry(request: Request, rid: int, conn=Depends(get_conn)):
     # attempts = 1: one manual try, then `failed` again without an automatic retry.
     return _act(request, conn, rid, "retry",
                 "UPDATE reminder SET status = 'planned', attempts = 1, send_at = ?, updated_at = ?"
-                " WHERE status = 'failed' AND id = ?",
-                (iso(planner.now()), iso(planner.now())))
+                " WHERE status = 'failed' AND appointment_at > ? AND id = ?",
+                (iso(planner.now()), iso(planner.now()), iso(planner.now())))
 
 
 @app.post("/reminder/{rid}/send")
@@ -375,9 +375,10 @@ def _fold(text: str) -> str:
     return " ".join(unicodedata.normalize("NFD", text).encode("ascii", "ignore").decode().casefold().split())
 
 
-@app.get("/message/patients")
-def search_patients(request: Request, q: str = "", conn=Depends(get_conn)):
-    """Up to 10 cached patients whose name holds every typed word, surname matches first."""
+@app.post("/message/patients")
+def search_patients(request: Request, q: str = Form(""), conn=Depends(get_conn)):
+    """Up to 10 cached patients whose name holds every typed word, surname matches first.
+    POST: in a query string the typed names would land in the access log (CLAUDE.md §7)."""
     require_user(request, conn)
     words = _fold(q).split()
     if not words:

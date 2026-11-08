@@ -20,7 +20,7 @@ Un carnet par praticien, en lecture seule : ses patients (référent dans Trophy
 2. Sur le téléphone : installer F-Droid (https://f-droid.org), puis **DAVx⁵** depuis F-Droid ;
    batterie de DAVx⁵ en « Non restreinte ».
 3. DAVx⁵ → **+** → « Connexion avec une URL et un nom d'utilisateur » :
-   - URL : `https://<serveur>.<tailnet>.ts.net:8443/carddav/<identifiant Trophy du praticien>/`
+   - URL : `https://medirappel.tail6b1de5.ts.net/carddav/<numéro Trophy du praticien>/` (ex. `/carddav/2/`)
    - nom d'utilisateur et mot de passe : ceux du bloc `contacts`.
 4. Dans le compte créé, cocher le carnet, choisir l'intervalle de synchronisation (1 h par exemple).
    Un compte DAVx⁵ par praticien.

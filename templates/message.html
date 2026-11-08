@@ -38,7 +38,7 @@ pick.addEventListener('input', () => {
   timer = setTimeout(async () => {
     const mine = ++seq;
     try {
-      const r = await fetch('/message/patients?q=' + encodeURIComponent(q));
+      const r = await fetch('/message/patients', {method: 'POST', body: new URLSearchParams({q})});
       const hits = await r.json();
       if (mine !== seq) return;  // a later keystroke already answered
       box.replaceChildren(...hits.map(p => {

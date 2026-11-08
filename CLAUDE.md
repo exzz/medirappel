@@ -140,7 +140,7 @@ Si l'envoi échoue (téléphone injoignable, statut `Failed`), **une seule nouve
 tentative**, `retry_delay_minutes` plus tard (60). Si elle échoue aussi, le SMS passe
 `failed`. Une erreur est écrite dans les logs et la ligne affiche
 **« Échec envoi »** dans l'interface. Le praticien peut relancer à la main un SMS
-`failed` (avec « Envoyer maintenant », seuls envois manuels possibles).
+`failed`, tant que le rendez-vous n'est pas passé, (avec « Envoyer maintenant », seuls envois manuels possibles).
 
 ---
 
@@ -185,13 +185,14 @@ son adresse Tailscale. Configuration dans `settings.json` → `smsgate` : `url`,
 `username`, `password` (authentification Basic).
 
 - Envoi : `POST /message` (`textMessage.text`, `phoneNumbers`,
-  `withDeliveryReport`). On garde l'identifiant renvoyé. **Jamais essayé sur le
+  `withDeliveryReport`, et notre propre `id` : une réponse illisible après acceptation ne
+  provoque pas de second SMS). On garde l'identifiant renvoyé. **Jamais essayé sur le
   vrai téléphone** : chemins et format tirés du README de SMSGate (certaines pages
   parlent de `/messages` au pluriel). À vérifier au premier essai réel.
 - Statut : **interrogation périodique** de `GET /message/{id}` (pas de webhook :
   il obligerait le téléphone à joindre le serveur). États attendus : `Pending`,
   `Processed`, `Sent`, `Delivered`, `Failed`. On interroge jusqu'à un état final
-  ou pendant 48 h au plus.
+  ou pendant 48 h au plus. Un message inconnu du téléphone (404) n'arrête pas le suivi des autres.
 - **Mode simulation** (`smsgate.simulation: true`) : aucun appel à SMSGate, les
   statuts sont simulés. Activé par défaut hors production.
 - **Numéro de test** (`smsgate.test_number`) : s'il est renseigné, tout SMS part
@@ -308,7 +309,7 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   remplit le mobile (mobile puis fixe, normalisés), qui reste modifiable à la main. La liste
   est en cache (`api_cache`, clé `patients`) : chargement complet une fois par jour, sinon
   l'ouverture de la page relit, en arrière-plan, la première page de `/patients` (500, plus
-  récents d'abord) et la fusionne. La recherche ne lit que le cache.
+  récents d'abord) et la fusionne. La recherche ne lit que le cache, en `POST` (un nom dans l'URL finirait dans les logs d'accès).
 - Lien **« Diagnostic »** en pied de page (simple lien, demande de l'utilisateur) : page
   `/diagnostic`, une ligne par service, ✓ vert, ✗ rouge avec la raison, ou « – » si non
   vérifiable : Tailscale entrant (la page arrive-t-elle d'une adresse 100.64.0.0/10 ou fd7a:115c:a1e0::/48),
@@ -405,7 +406,7 @@ app/scheduler.py   boucles asyncio : planification quotidienne, envois temporis�
 app/auth.py        PIN, sessions, comptes (repris de Sterilog)
 app/journal.py     journal d'audit chaîné (repris de Sterilog)
 app/carddav.py     carnets de contacts CardDAV en lecture seule, un par praticien
-app/main.py        routes : /login, /logout, / (jour), /refresh, /message, /message/patients, /diagnostic, /carddav/{praticien}/, /reminder/{id}/cancel|restore|retry|send|exclude|include
+app/main.py        routes : /login, /logout, / (jour), /refresh, /message, /message/patients (POST), /diagnostic, /carddav/{praticien}/, /reminder/{id}/cancel|restore|retry|send|exclude|include
 templates/ static/
 medirappel.py      ligne de commande : hash-pin (pour users.json), verify (journal)
 tests/             faux Trophy (httpx.MockTransport), horloge figée, SMSGate en simulation
@@ -420,7 +421,7 @@ Tables : `user`, `session`, `api_cache`, `reminder`, `optout` (un SMS par rendez
 Déploiement : comme `../trophy`, `Dockerfile` seul, **pas de compose dans ce dépôt** (décision de l'utilisateur).
 Le compose commun (Trophy, Sterilog, MediRappel) vit dans **`/srv/compose/cabinet`**, avec son README :
 il ne construit rien, il prend les versions dans son `.env`. Tailscale tourne **sur l'hôte** : entrée par
-`tailscale serve` vers `127.0.0.1:8222`, sortie par le routage de l'hôte ; l'API Trophy y est `http://trophy:8333`.
+`tailscale serve` vers `127.0.0.1:8222`, publié en **https://medirappel.tail6b1de5.ts.net** (port 443), sortie par le routage de l'hôte ; l'API Trophy y est `http://trophy:8333`.
 Image Ubuntu + venv uv, `TZ=Europe/Paris`, port 8222, utilisateur `app_medirappel` **uid:gid 10012:10012**
 (le même uid que sur l'hôte, propriétaire de `medirappel/config` et `medirappel/data`), `/data` en volume,
 configuration montée en lecture seule dans `/config` (`MEDIRAPPEL_*`), système de fichiers en lecture seule,

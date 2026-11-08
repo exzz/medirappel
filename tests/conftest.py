@@ -77,6 +77,7 @@ def env(tmp_path, monkeypatch, clock):
     monkeypatch.setenv("MEDIRAPPEL_USERS", str(tmp_path / "users.json"))
     monkeypatch.setenv("MEDIRAPPEL_NO_SCHEDULER", "1")
     monkeypatch.setattr(scheduler, "_built_on", None)
+    monkeypatch.setattr(trophy, "_patients_memo", (0.0, []))
     monkeypatch.setattr(db, "DATA_DIR", tmp_path)
     monkeypatch.setattr(db, "LOGS_DIR", tmp_path / "logs")
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
