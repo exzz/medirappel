@@ -170,7 +170,8 @@ D'où les règles suivantes :
 
 Endpoints utilisés : `/practitioners` (avec `horaires`, 7 jours ISO, 1 = lundi),
 `/holidays?from&to`, `/appointments?practitioner&from&to&with_patient=true` (le
-patient joint porte `mobile`, `tel`, `sms_actif` : aucun appel `/patients`).
+patient joint porte `mobile`, `tel`, `sms_actif`). `/patients` ne sert qu'à « Envoyer un
+message » et aux carnets de contacts.
 Un créneau sans patient (pause, plage bloquée) est ignoré. Le nom du praticien
 dans le SMS est le `name` de `users.json`, pas le `NOM_PRENOM` de Trophy.
 Rendez-vous annulé : supprimé de l'agenda. « RDV manqué » : `absent` (`PASVENU`), voir §3.
@@ -234,8 +235,8 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   sont des données de santé. La base garde l'identifiant Trophy du patient, son
   nom (les jours passés ne rappellent jamais Trophy), son numéro normalisé et le
   texte, le tout purgé avec la rétention.
-- La liste des patients pour « Envoyer un message » (identifiant, nom, prénom, date de
-  naissance, téléphones) est en cache dans `api_cache` ; purgée si elle n'a pas servi
+- La liste des patients pour « Envoyer un message » et les carnets de contacts (identifiant, nom,
+  prénom, date de naissance, téléphones, praticien référent) est en cache dans `api_cache` ; purgée si elle n'a pas servi
   depuis 2 jours, comme le reste du cache.
 - **Rétention** : SMS et cache purgés après `retention_days` (365).
 - **Logs applicatifs** (`data/logs/medirappel.log`, 5 Mo × 5) : tout y passe
@@ -314,6 +315,20 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   Tailscale sortant (`100.100.100.100:53` qui répond, sans commande `tailscale` : Tailscale
   tourne sur l'hôte et les conteneurs joignent le tailnet par son routage), API Trophy (vraie requête
   `/holidays` du jour, hors cache), SMSGate (`GET /health`, sans envoi). Tous les rôles.
+- **Carnets de contacts** (demande de l'utilisateur, 2026-11-08) : pour le téléphone SMSGate, qui
+  ne sert qu'à ça. Un carnet CardDAV **en lecture seule par praticien géré** (rôle `practitioner`,
+  pas les assistantes) : `/carddav/<identifiant Trophy du praticien>/`, nommé comme le compte. Il
+  contient les patients dont ce praticien est le **référent** dans Trophy (`praticien_id` de
+  `/patients`) et qui ont un mobile français ; fiche « NOM Prénom » + mobile, rien d'autre (pas
+  de suffixe, pas de date de naissance). Synchronisé sur Android par **DAVx⁵** (F-Droid), par
+  Tailscale. Servi par MediRappel depuis le cache des patients (pas de Radicale) : PROPFIND,
+  REPORT `addressbook-multiget`, GET ; toute écriture refusée (Trophy est la seule source).
+  Authentification Basic, `contacts.username|password` de `settings.json` (sans ce bloc, pas
+  de carnet), plafond d'essais par adresse comme le PIN. Cache vide : 503, jamais un carnet
+  vide (DAVx⁵ effacerait tous les contacts). Chaque synchronisation relance la relecture des
+  nouveaux patients, une fois par minute au plus. Vérifié avec vdirsyncer, pas encore avec DAVx⁵.
+  Exposition : tout le fichier patients d'un praticien sur ce téléphone ; jamais d'application
+  de messagerie (WhatsApp, Telegram…) ni de synchronisation Google des contacts dessus.
 - Utilisable sur le poste du cabinet et sur téléphone (responsive). Contenu sur toute la largeur
   de l'écran ; sous 1100 px, le tableau devient une liste de blocs (il ne tient plus). Lignes compactes
   (demande de l'utilisateur) : boutons d'environ 36 px de haut, et non 56 px comme dans
@@ -373,6 +388,7 @@ d'envoi ne change pas.
   "trophy": { "url": "http://127.0.0.1:8081", "api_key": "…" },
   "smsgate": { "url": "http://100.x.y.z:8080", "username": "…", "password": "…",
                "simulation": true, "test_number": null },
+  "contacts": { "username": "…", "password": "…" },
   "cache_ttl_s": { "practitioners": 86400, "calendar": 86400, "appointments": 900 },
   "timeline": { "past_days": 30, "future_days": 14 },
   "retention_days": 365
@@ -388,7 +404,8 @@ app/smsgate.py     client SMSGate, mode simulation, numéro de test
 app/scheduler.py   boucles asyncio : planification quotidienne, envois temporisés, suivi des statuts, purge
 app/auth.py        PIN, sessions, comptes (repris de Sterilog)
 app/journal.py     journal d'audit chaîné (repris de Sterilog)
-app/main.py        routes : /login, /logout, / (jour), /refresh, /message, /message/patients, /diagnostic, /reminder/{id}/cancel|restore|retry|send|exclude|include
+app/carddav.py     carnets de contacts CardDAV en lecture seule, un par praticien
+app/main.py        routes : /login, /logout, / (jour), /refresh, /message, /message/patients, /diagnostic, /carddav/{praticien}/, /reminder/{id}/cancel|restore|retry|send|exclude|include
 templates/ static/
 medirappel.py      ligne de commande : hash-pin (pour users.json), verify (journal)
 tests/             faux Trophy (httpx.MockTransport), horloge figée, SMSGate en simulation

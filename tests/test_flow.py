@@ -297,3 +297,27 @@ def test_auto_send_off_keeps_planned_but_sends_manual_retry(env, clock):
     clock["now"] = datetime(2026, 11, 9, 20, 30)
     run(scheduler.send_due(conn))
     assert rows(conn)[1]["status"] == "missed"
+
+
+def test_carddav_book_per_practitioner(env, clock):
+    fake, conn = env
+    auth_ok = ("telephone", "changer-moi")  # settings.example.json
+    pat = lambda i, prat, mobile: {"id": i, "nom": "Durand", "prenom": f"Zoé{i}", "naissance": None,  # noqa: E731
+                                   "mobile": mobile, "tel": "", "praticien_id": prat}
+    with TestClient(scheduler_app()) as client:
+        dav = lambda m, path, **kw: client.request(m, path, auth=kw.pop("auth", auth_ok), **kw)  # noqa: E731
+        assert dav("PROPFIND", "/carddav/1/").status_code == 503  # empty cache: never an empty book
+        fake.patients = [pat(1, 1, "06 11 22 33 44"), pat(2, 1, "01 23 45 67 89"), pat(3, 2, "0612345678")]
+        run(trophy.refresh_patients())
+        assert dav("PROPFIND", "/carddav/1/", auth=("telephone", "faux")).status_code == 401
+        r = dav("PROPFIND", "/carddav/1/", headers={"Depth": "1"})
+        assert r.status_code == 207 and "<card:addressbook/>" in r.text and "Dr Bellec" in r.text
+        assert "/carddav/1/1.vcf" in r.text and "2.vcf" not in r.text and "3.vcf" not in r.text
+        r = dav("REPORT", "/carddav/1/", content=(
+            '<card:addressbook-multiget xmlns:d="DAV:" xmlns:card="urn:ietf:params:xml:ns:carddav">'
+            '<d:prop><d:getetag/><card:address-data/></d:prop><d:href>/carddav/1/1.vcf</d:href></card:addressbook-multiget>'))
+        assert "FN:DURAND Zoé1" in r.text and "TEL;TYPE=CELL:+33611223344" in r.text
+        assert dav("GET", "/carddav/1/1.vcf").headers["etag"]
+        assert dav("PUT", "/carddav/1/9.vcf", content="x").status_code == 403
+        assert dav("PROPFIND", "/carddav/2/").status_code == 207  # Dr Autre has an account
+        assert dav("PROPFIND", "/carddav/99/").status_code == 404

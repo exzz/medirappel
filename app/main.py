@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import auth, config, db, journal, planner, scheduler, smsgate, trophy
+from . import auth, carddav, config, db, journal, planner, scheduler, smsgate, trophy
 from .config import BASE_DIR
 from .planner import iso, mask
 
@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(carddav.router)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.globals.update(css_v=int((BASE_DIR / "static" / "app.css").stat().st_mtime), status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
@@ -363,16 +364,10 @@ def _message_page(request, user, **ctx):
         "user": user, "simulation": g.get("simulation"), "test_number": g.get("test_number"), **ctx})
 
 
-_tasks = set()  # keep background tasks referenced until they end
-
-
 @app.get("/message", response_class=HTMLResponse)
 async def message_page(request: Request, conn=Depends(get_conn)):
     user = require_user(request, conn)
-    # The page never waits for Trophy: the search serves the cache, refreshed meanwhile.
-    task = asyncio.get_running_loop().create_task(trophy.refresh_patients())
-    _tasks.add(task)
-    task.add_done_callback(_tasks.discard)
+    trophy.refresh_patients_soon()  # the search serves the cache meanwhile
     return _message_page(request, user)
 
 

@@ -66,6 +66,9 @@ def settings() -> dict:
         raise ConfigError("settings.json: smsgate.url, username and password are required outside simulation.")
     if not isinstance(s["reminder_days_before"], int) or s["reminder_days_before"] < 0:
         raise ConfigError("settings.json: reminder_days_before must be a positive integer.")
+    c = s.get("contacts")
+    if c is not None and not (isinstance(c, dict) and all(isinstance(c.get(k), str) and c[k] for k in ("username", "password"))):
+        raise ConfigError("settings.json: contacts needs a username and a password (or remove the block).")
     if not isinstance(s["auto_send"], bool):
         raise ConfigError("settings.json: auto_send must be true or false.")
     s["send_time"] = _hhmm(s["send_time"], "send_time")

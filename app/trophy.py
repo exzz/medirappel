@@ -103,15 +103,16 @@ async def refresh_patients() -> None:
     try:
         row = conn.execute("SELECT body FROM api_cache WHERE key = 'patients'").fetchone()
         old = json.loads(row["body"]) if row else None
-        full = not old or time.time() - old["full_at"] > FULL_EVERY_S
+        # v2 adds praticien_id (address books): an older cache gets a full load.
+        full = not old or time.time() - old["full_at"] > FULL_EVERY_S or old.get("v") != 2
         found = {}
         for n in range(1000 if full else 1):
             page = await _fetch(config.trophy()["endpoints"]["patients"], {"limit": PAGE, "offset": n * PAGE})
-            found.update({str(p["id"]): {k: p.get(k) for k in ("id", "nom", "prenom", "naissance", "mobile", "tel")}
+            found.update({str(p["id"]): {k: p.get(k) for k in ("id", "nom", "prenom", "naissance", "mobile", "tel", "praticien_id")}
                           for p in page})
             if len(page) < PAGE:
                 break
-        data = ({"full_at": time.time(), "patients": found} if full
+        data = ({"v": 2, "full_at": time.time(), "patients": found} if full
                 else {**old, "patients": {**old["patients"], **found}})
         conn.execute("INSERT OR REPLACE INTO api_cache (key, fetched_at, body) VALUES ('patients', ?, ?)",
                      (time.time(), json.dumps(data)))
@@ -121,3 +122,19 @@ async def refresh_patients() -> None:
     finally:
         _refreshing = False
         conn.close()
+
+
+_tasks = set()  # keep background tasks referenced until they end
+_last_soon = 0.0
+
+
+def refresh_patients_soon() -> None:
+    """Start a refresh without waiting for it, once a minute at most (a DAVx⁵ sync is
+    hundreds of requests): callers serve the cache meanwhile."""
+    global _last_soon
+    if time.monotonic() - _last_soon < 60:
+        return
+    _last_soon = time.monotonic()
+    task = asyncio.get_running_loop().create_task(refresh_patients())
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)

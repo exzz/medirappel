@@ -23,6 +23,7 @@
     "simulation": true,
     "test_number": null
   },
+  "contacts": { "username": "telephone", "password": "changer-moi" },
   "cache_ttl_s": { "practitioners": 86400, "calendar": 86400, "appointments": 900 },
   "timeline": { "past_days": 30, "future_days": 14 },
   "retention_days": 365
