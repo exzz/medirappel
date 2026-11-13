@@ -105,7 +105,7 @@ app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
 app.include_router(carddav.router)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
-templates.env.globals.update(css_v=int((BASE_DIR / "static" / "app.css").stat().st_mtime), status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
+templates.env.globals.update(version=os.environ.get("MEDIRAPPEL_VERSION", "dev"), css_v=int((BASE_DIR / "static" / "app.css").stat().st_mtime), status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
 
 
 @app.middleware("http")

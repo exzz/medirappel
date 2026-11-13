@@ -55,6 +55,10 @@ EXPOSE 8222
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8222/login', timeout=4)"]
 
+# Version affichée dans le bandeau, passée par deploy/release.sh (en dernier : ne casse pas le cache).
+ARG VERSION=dev
+ENV MEDIRAPPEL_VERSION=$VERSION
+
 # UN SEUL processus : ordonnanceur, cache et file d'envoi vivent dedans.
 # Jamais --workers > 1 (double envoi).
 # --proxy-headers : l'adresse du poste (plafond d'essais de PIN, diagnostic Tailscale) vient

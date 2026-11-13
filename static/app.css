@@ -48,6 +48,7 @@ code { font-size: .9em; }
 .brand { color: #fff; text-decoration: none; font-weight: 650; font-size: var(--t-section);
          display: inline-flex; align-items: center; gap: .45rem; }
 .brand img { display: block; }
+.brand .ver { font-size: var(--t-detail); font-weight: 400; opacity: .7; align-self: flex-end; margin-bottom: .2rem; }
 .who { margin-left: auto; font-size: var(--t-detail); opacity: .9; min-width: 0;
        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logout { margin: 0; flex-shrink: 0; }

@@ -381,7 +381,8 @@ def test_no_phone_number_in_logs_and_healthcheck_dropped(env, clock, caplog):
 
 def test_installable_web_app(env, clock):
     with TestClient(scheduler_app()) as client:
-        assert '<link rel="manifest" href="/static/manifest.json">' in client.get("/login").text
+        page = client.get("/login").text
+        assert '<link rel="manifest" href="/static/manifest.json">' in page and '<small class="ver">dev</small>' in page
         m = client.get("/static/manifest.json").json()
         assert m["display"] == "standalone" and m["start_url"] == "/"
         for icon in m["icons"]:  # Android needs 192 and 512, all reachable

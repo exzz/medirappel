@@ -443,7 +443,8 @@ un seul processus, sur le serveur du cabinet. `--proxy-headers` : `X-Forwarded-F
 `FORWARDED_ALLOW_IPS` (le réseau du compose, par où arrive le `tailscale serve`), sinon tous les postes
 partagent l'adresse de la passerelle et le plafond d'essais de PIN.
 `deploy/release.sh X.Y.Z` builde `medirappel:X.Y.Z` et `:latest`, puis crée le tag git `vX.Y.Z`
-seulement si le build réussit (arbre propre exigé). La version vient du tag, pas de `pyproject.toml`.
+seulement si le build réussit (arbre propre exigé). La version vient du tag, pas de `pyproject.toml` : passée au build (`--build-arg VERSION`,
+`ENV MEDIRAPPEL_VERSION`), affichée en petit à côté de « MediRappel » dans le bandeau (« dev » hors image).
 
 ---
 

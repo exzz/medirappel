@@ -29,6 +29,7 @@ git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && { echo "Le tag $TAG exi
 REV="$(git rev-parse --short HEAD)"
 echo ">> build $IMAGE:$V (rev $REV)"
 docker build \
+    --build-arg "VERSION=$V" \
     --label "org.opencontainers.image.version=$V" \
     --label "org.opencontainers.image.revision=$REV" \
     -t "$IMAGE:$V" -t "$IMAGE:latest" .
