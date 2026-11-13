@@ -12,7 +12,6 @@ import uuid
 import httpx
 
 from . import config
-from .planner import mask
 
 log = logging.getLogger(__name__)
 transport: httpx.AsyncBaseTransport | None = None  # tests
@@ -28,7 +27,7 @@ async def send(phone: str, text: str) -> str:
     g = config.settings()["smsgate"]
     phone = g.get("test_number") or phone
     if g.get("simulation"):
-        log.info("simulation: SMS to %s (%d chars)", mask(phone), len(text))
+        log.info("simulation: SMS of %d chars", len(text))
         return "sim-" + uuid.uuid4().hex
     # Our own id: once the phone said yes, nothing below may raise (a raise means a second SMS).
     # shortcut: a timeout after the phone accepted still leads to a retry (2nd SMS); rare on Tailscale.

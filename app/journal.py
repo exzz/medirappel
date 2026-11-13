@@ -51,8 +51,9 @@ def record(conn: sqlite3.Connection, action: str, *, user_id: int | None = None,
         raise
     uid = user_id or (entity_id if entity == "user" else None)  # failed login: the account is the entity
     who = conn.execute("SELECT login FROM user WHERE id = ?", (uid,)).fetchone() if uid else None
+    # A Trophy patient id + "refuses SMS" identifies a patient: it stays in the local table only.
     log.info("%s user=%s %s=%s %s", action, who["login"] if who else "-", entity or "-",
-             eid or "-", payload if data else "")
+             "-" if entity == "patient" else eid or "-", payload if data else "")
 
 
 def verify_chain(conn: sqlite3.Connection) -> dict:

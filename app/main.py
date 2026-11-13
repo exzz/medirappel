@@ -9,6 +9,7 @@ import logging
 import logging.handlers
 import os
 import sqlite3
+import sys
 import time
 import unicodedata
 from contextlib import asynccontextmanager
@@ -46,16 +47,33 @@ LONG_MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
 MONTHS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
 
 
+class _NoHealthcheck(logging.Filter):
+    """Drop the Docker HEALTHCHECK (GET /login from inside the container every 30 s): 3/4 of the lines."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        a = record.args
+        return not (isinstance(a, tuple) and len(a) > 2 and str(a[0]).startswith("127.0.0.1:") and a[2] == "/login")
+
+
 def _setup_logs() -> None:
-    db.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    h = logging.handlers.RotatingFileHandler(db.LOGS_DIR / "medirappel.log", maxBytes=5_000_000,
-                                             backupCount=5, encoding="utf-8")
-    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s %(message)s"))
+    stdout = os.environ.get("MEDIRAPPEL_LOG") == "stdout"  # container: the runtime (journald) keeps them
+    if stdout:
+        h = logging.StreamHandler(sys.stdout)
+    else:
+        db.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        h = logging.handlers.RotatingFileHandler(db.LOGS_DIR / "medirappel.log", maxBytes=5_000_000,
+                                                 backupCount=5, encoding="utf-8")
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(name)s %(message)s", "%Y-%m-%dT%H:%M:%S%z"))
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     root.addHandler(h)
-    for name in ("uvicorn.error", "uvicorn.access"):  # HTTP access and server errors in the same file
-        logging.getLogger(name).addHandler(h)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one INFO line per Trophy/SMSGate call
+    for name in ("uvicorn.error", "uvicorn.access"):  # HTTP access and server errors, same place, same format
+        lg = logging.getLogger(name)
+        if stdout:  # uvicorn's own console handlers would print every line twice
+            lg.handlers, lg.propagate = [], False
+        lg.addHandler(h)
+    logging.getLogger("uvicorn.access").addFilter(_NoHealthcheck())
 
 
 @asynccontextmanager
@@ -76,10 +94,11 @@ async def lifespan(app: FastAPI):
         log.warning("sms_template renders to %d chars (> 160): it will cost 2 SMS", len(sample))
     if not config.settings()["auto_send"]:
         log.warning("auto_send is false: planned SMS are NOT sent automatically")
-    task = None if os.environ.get("MEDIRAPPEL_NO_SCHEDULER") else asyncio.create_task(scheduler.run())
+    tasks = [] if os.environ.get("MEDIRAPPEL_NO_SCHEDULER") else [
+        asyncio.create_task(scheduler.run()), asyncio.create_task(_health_loop())]
     yield
-    if task:
-        task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -216,7 +235,7 @@ async def day_page(request: Request, day: str | None = None, practitioner: int |
             await planner.sync(conn, pid, name, current, current, force=True, late_before=planner.now())
         is_open = await planner.calendar(pid)
     except Exception as exc:
-        log.warning("Trophy unavailable: %s", exc)
+        log.warning("Trophy unavailable: %r", exc)
         warning = "Logiciel du cabinet injoignable : planification non actualisée."
         is_open = lambda d: True  # noqa: E731
 
@@ -253,7 +272,7 @@ async def refresh_planning(request: Request, day: str = Form(...), practitioner:
                            force=True, late_before=planner.now())
         result = "ok"
     except Exception as exc:
-        log.warning("planning refresh failed for practitioner %s: %s", pid, exc)
+        log.warning("planning refresh failed for practitioner %s: %r", pid, exc)
         result = "failed"
     journal.record(conn, "planning.refresh", user_id=user["id"], entity="practitioner", entity_id=pid,
                    data={"result": result})
@@ -319,7 +338,7 @@ async def send_now(request: Request, rid: int, conn=Depends(get_conn)):
         await planner.sync(conn, row["practitioner_id"], names[row["practitioner_id"]], day, day,
                            force=True, late_before=planner.now())
     except Exception as exc:
-        log.warning("send-now re-read failed for reminder %s: %s", rid, exc)
+        log.warning("send-now re-read failed for reminder %s: %r", rid, exc)
         return _back(row, "&refresh=failed")
     # attempts = 2: a failure goes straight to `failed`, no automatic retry.
     claimed = conn.execute("UPDATE reminder SET status = 'sending', attempts = 2, updated_at = ?"
@@ -415,12 +434,12 @@ async def send_message(request: Request, phone: str = Form(...), text: str = For
     try:
         gid = await smsgate.send(number, body)
     except Exception as exc:
-        log.warning("free SMS to %s failed: %s", mask(number), exc)
+        log.warning("free SMS failed: %r", exc)
         return _message_page(request, user, error="Échec de l'envoi : téléphone SMSGate injoignable.",
                              phone=phone, text=text)
     journal.record(conn, "message.send", user_id=user["id"], entity="message", entity_id=None,
                    data={"chars": len(body), "gateway_id": gid})
-    log.info("free SMS handed to SMSGate for %s by %s", mask(number), user["login"])
+    log.info("free SMS handed to SMSGate by %s", user["login"])
     return _message_page(request, user, sent=mask(number))
 
 
@@ -470,6 +489,31 @@ async def _smsgate():
     r.raise_for_status()
     status = r.json().get("status")
     return status == "pass", f"état {status}, {(time.monotonic() - t0) * 1000:.0f} ms" + note
+
+
+HEALTH_EVERY_S = 300
+
+
+async def health_line() -> None:
+    """The /diagnostic checks as one log line, e.g. `health tailscale=ok trophy=fail smsgate=ok | trophy: …`.
+    Alerts key on `=fail` (WARNING) and on this line missing for 15 min (service dead or stuck)."""
+    probes = [("tailscale", _tailscale_out), ("trophy", _trophy)]
+    if not config.settings()["smsgate"].get("simulation"):  # no phone to check yet
+        probes.append(("smsgate", _smsgate))
+    checks = await asyncio.gather(*(_check(n, p) for n, p in probes))
+    bad = [(n, d) for n, ok, d in checks if ok is False]
+    log.log(logging.WARNING if bad else logging.INFO, "health %s%s",
+            " ".join(f"{n}={'fail' if ok is False else 'ok'}" for n, ok, _ in checks),
+            " | " + "; ".join(f"{n}: {d}" for n, d in bad) if bad else "")
+
+
+async def _health_loop() -> None:
+    while True:
+        try:
+            await health_line()
+        except Exception:
+            log.exception("health check failed")
+        await asyncio.sleep(HEALTH_EVERY_S)
 
 
 @app.get("/diagnostic", response_class=HTMLResponse)

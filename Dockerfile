@@ -36,8 +36,8 @@ COPY templates ./templates
 COPY static ./static
 COPY medirappel.py ./
 
-# Les secrets ne sont JAMAIS dans l'image : settings.json et users.json se montent en lecture seule dans /config ; la base et les logs
-# vivent dans le volume /data.
+# Les secrets ne sont JAMAIS dans l'image : settings.json et users.json se montent en lecture seule dans /config ; la base
+# vit dans le volume /data. Les logs partent sur stdout (MEDIRAPPEL_LOG=stdout) : docker logs / journald.
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -45,6 +45,7 @@ ENV PATH=/app/.venv/bin:$PATH \
     MEDIRAPPEL_SETTINGS=/config/settings.json \
     MEDIRAPPEL_USERS=/config/users.json \
     MEDIRAPPEL_DATA=/data \
+    MEDIRAPPEL_LOG=stdout \
     FORWARDED_ALLOW_IPS=127.0.0.1
 
 USER app_medirappel

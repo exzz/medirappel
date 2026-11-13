@@ -240,12 +240,21 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   prénom, date de naissance, téléphones, praticien référent) est en cache dans `api_cache` ; purgée si elle n'a pas servi
   depuis 2 jours, comme le reste du cache.
 - **Rétention** : SMS et cache purgés après `retention_days` (365).
-- **Logs applicatifs** (`data/logs/medirappel.log`, 5 Mo × 5) : tout y passe
-  (demande de l'utilisateur). Chaque entrée du journal d'audit y est recopiée par
-  `journal.record` (connexions, échecs, déconnexions, annuler, rétablir, relancer, avec le
-  login). S'y ajoutent les synchronisations d'agenda, le plan quotidien, chaque envoi,
-  changement de statut, échec, SMS manqué, et les accès HTTP d'uvicorn. Les numéros
-  sont masqués (`+3361234****`). Jamais de nom de patient ni de texte de SMS.
+- **Logs applicatifs** : en conteneur (`MEDIRAPPEL_LOG=stdout`, posé par le Dockerfile), sur stdout,
+  donc `docker logs` / journald (demande de l'utilisateur, 2026-11-13) ; hors conteneur,
+  `data/logs/medirappel.log` (5 Mo × 5). Format unique `AAAA-MM-JJTHH:MM:SS+0100 NIVEAU logger message`.
+  Tout y passe : copie du journal d'audit (avec le login), synchronisations d'agenda, plan quotidien,
+  envois, statuts, échecs (type d'exception compris : un délai dépassé `httpx` a un message vide),
+  SMS manqués, accès HTTP d'uvicorn. Retirés : le healthcheck Docker (`GET /login` depuis 127.0.0.1)
+  et les requêtes `httpx` en INFO.
+  **Exportables hors du cabinet** (alertes, demande de l'utilisateur) : donc **aucune donnée qui
+  désigne un patient**, même pseudonyme : ni nom, ni numéro (même masqué), ni identifiant Trophy du
+  patient (`patient=-` dans la copie de l'audit), ni texte de SMS. Seuls les identifiants locaux
+  (rappel, praticien) y figurent. Restent des données du personnel (login, adresse Tailscale de
+  l'appareil) : déclarer ces logs au registre, avec leur durée de conservation à la destination.
+- **Ligne de santé** toutes les 5 min, même sans activité : `health tailscale=ok trophy=ok smsgate=fail | smsgate: …`
+  (WARNING si un service tombe ; SMSGate non testé en simulation). Alerter sur `=fail` et sur
+  l'absence de la ligne pendant 15 min (service mort ou bloqué).
 - **Journal d'audit** append-only et chaîné par SHA-256, comme dans Sterilog
   (`app/journal.py` là-bas). On y trace connexions, annulations, rétablissements,
   relances manuelles (`reminder.cancel|restore|retry`). On n'y écrit jamais de nom
@@ -330,6 +339,11 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   nouveaux patients, une fois par minute au plus. Vérifié avec vdirsyncer, pas encore avec DAVx⁵.
   Exposition : tout le fichier patients d'un praticien sur ce téléphone ; jamais d'application
   de messagerie (WhatsApp, Telegram…) ni de synchronisation Google des contacts dessus.
+- **Application installable (PWA**, demande de l'utilisateur, 2026-11-13) : `static/manifest.json`
+  (plein écran sans barre d'adresse, icônes 192/512 et « maskable » tirées de `icon-medirappel.png`),
+  `apple-touch-icon` pour iOS. Android propose « Installer l'application » depuis Chrome, en HTTPS
+  (adresse `ts.net` de Tailscale). **Pas de service worker** : rien n'est mis en cache sur
+  l'appareil (données de santé, planning toujours relu) ; hors réseau, Chrome affiche sa page d'erreur.
 - Utilisable sur le poste du cabinet et sur téléphone (responsive). Contenu sur toute la largeur
   de l'écran ; sous 1100 px, le tableau devient une liste de blocs (il ne tient plus). Lignes compactes
   (demande de l'utilisateur) : boutons d'environ 36 px de haut, et non 56 px comme dans

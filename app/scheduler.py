@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta
 import httpx
 
 from . import config, db, planner, smsgate, trophy
-from .planner import iso, mask
+from .planner import iso
 
 log = logging.getLogger(__name__)
 TICK_S = 60
@@ -83,7 +83,7 @@ async def send_due(conn) -> None:
         try:
             await planner.sync(conn, pid, names[pid], d, d, force=True, late_before=_late_before(today))
         except Exception as exc:  # Trophy down: the midnight plan stands
-            log.warning("agenda re-read failed for practitioner %s: %s", pid, exc)
+            log.warning("agenda re-read failed for practitioner %s: %r", pid, exc)
 
     first = True
     for r in _due(conn):
@@ -113,12 +113,12 @@ async def hand_over(conn, r, attempts: int) -> None:
     try:
         gid = await smsgate.send(r["phone"], r["body"])
     except Exception as exc:
-        fail(conn, r["id"], attempts, f"envoi: {exc}")
+        fail(conn, r["id"], attempts, f"envoi: {exc!r}")
         return
     conn.execute("UPDATE reminder SET status = 'submitted', gateway_id = ?, sent_at = ?,"
                  " reason = NULL, updated_at = ? WHERE id = ?",
                  (gid, iso(planner.now()), iso(planner.now()), r["id"]))
-    log.info("SMS reminder %s handed to SMSGate for %s", r["id"], mask(r["phone"]))
+    log.info("SMS reminder %s handed to SMSGate", r["id"])
 
 
 async def poll_states(conn) -> None:
@@ -129,10 +129,10 @@ async def poll_states(conn) -> None:
         try:
             st = await smsgate.state(r["gateway_id"])
         except httpx.TransportError as exc:
-            log.warning("SMSGate unreachable for state of %s: %s", r["id"], exc)
+            log.warning("SMSGate unreachable for state of %s: %r", r["id"], exc)
             return  # phone unreachable: try again next tick
         except Exception as exc:  # e.g. 404 for a message the phone forgot: the others still count
-            log.warning("SMSGate state of %s unavailable: %s", r["id"], exc)
+            log.warning("SMSGate state of %s unavailable: %r", r["id"], exc)
             continue
         if st == "Failed":
             fail(conn, r["id"], r["attempts"], "SMSGate: Failed")

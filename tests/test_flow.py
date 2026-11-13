@@ -181,7 +181,8 @@ def test_missed_in_trophy_is_neither_sent_nor_listed(env, clock):
     assert set(rows(conn)) == {2} and rows(conn)[2]["status"] == "delivered"  # sent SMS keeps its status
 
 
-def test_exclude_and_include_patient(env, clock):
+def test_exclude_and_include_patient(env, clock, caplog):
+    caplog.set_level("INFO")
     fake, conn = env
     fake.appointments = [appt(1, "2026-11-10T10:00"), appt(2, "2026-11-12T10:00")]
     for a in fake.appointments:  # same patient, two days
@@ -201,6 +202,8 @@ def test_exclude_and_include_patient(env, clock):
         assert rows(conn)[1]["status"] == "planned"
     actions = [r["action"] for r in conn.execute("SELECT action FROM journal")]
     assert "patient.exclude" in actions and "patient.include" in actions
+    # Logs may leave the server: no Trophy patient id there (the journal table keeps it).
+    assert "patient.exclude user=bellec patient=- " in caplog.text and "=77" not in caplog.text
 
 
 def test_assistant_sees_only_her_practitioners(env, clock):
@@ -347,3 +350,40 @@ def test_poll_states_skips_an_unknown_message(env, clock, monkeypatch):
         lambda r: httpx.Response(404) if r.url.path == "/message/g1" else httpx.Response(200, json={"state": "Delivered"})))
     run(scheduler.poll_states(conn))
     assert (rows(conn)[1]["status"], rows(conn)[2]["status"]) == ("submitted", "delivered")
+
+
+def test_health_line(env, clock, caplog, monkeypatch):
+    async def tailnet_ok():
+        return True, "ok"
+    monkeypatch.setattr(main, "_tailscale_out", tailnet_ok)
+    monkeypatch.setattr(smsgate, "transport", httpx.MockTransport(lambda r: httpx.Response(503)))
+    config.settings()["smsgate"]["simulation"] = False  # cache cleared by the fixture
+    run(main.health_line())
+    rec = [r for r in caplog.records if r.getMessage().startswith("health ")][-1]
+    assert rec.levelname == "WARNING"
+    assert rec.getMessage() == "health tailscale=ok trophy=ok smsgate=fail | smsgate: réponse HTTP 503"
+
+
+def test_no_phone_number_in_logs_and_healthcheck_dropped(env, clock, caplog):
+    import logging
+    caplog.set_level("INFO")
+    fake, conn = env
+    fake.appointments = [appt(1, "2026-11-10T10:00")]
+    run(scheduler.plan_and_send(conn))
+    clock["now"] = datetime(2026, 11, 9, 9, 0)
+    run(scheduler.plan_and_send(conn))
+    assert "handed to SMSGate" in caplog.text and "+336" not in caplog.text
+    f = main._NoHealthcheck()
+    rec = lambda ip: logging.LogRecord("uvicorn.access", 20, "", 0, '%s - "%s %s HTTP/%s" %d',  # noqa: E731
+                                       (ip, "GET", "/login", "1.1", 200), None)
+    assert not f.filter(rec("127.0.0.1:5000")) and f.filter(rec("100.64.0.9:5000"))
+
+
+def test_installable_web_app(env, clock):
+    with TestClient(scheduler_app()) as client:
+        assert '<link rel="manifest" href="/static/manifest.json">' in client.get("/login").text
+        m = client.get("/static/manifest.json").json()
+        assert m["display"] == "standalone" and m["start_url"] == "/"
+        for icon in m["icons"]:  # Android needs 192 and 512, all reachable
+            assert client.get(icon["src"]).status_code == 200
+        assert {i["sizes"] for i in m["icons"]} >= {"192x192", "512x512"}
