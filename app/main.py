@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 import logging
 import logging.handlers
@@ -172,7 +171,7 @@ def login(request: Request, user_id: int = Form(...), pin: str = Form(...), conn
     auth.give_back_ip_try(_ip(request))
     resp = RedirectResponse("/", status_code=303)
     resp.set_cookie(COOKIE, auth.open_session(conn, user["id"]), httponly=True, samesite="strict",
-                    max_age=12 * 3600)
+                    secure=True, max_age=12 * 3600)  # every entry point is HTTPS (tailscale serve, Caddy)
     return resp
 
 
@@ -456,9 +455,6 @@ async def _check(name, probe):
     return name, ok, detail
 
 
-TAILNET = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fd7a:115c:a1e0::/48"))
-
-
 async def _tailscale_out():
     """100.100.100.100 is tailscaled's own address: it answers whether Tailscale runs on
     the host (containers reach the tailnet through its routing) or in a sidecar."""
@@ -519,14 +515,6 @@ async def _health_loop() -> None:
 @app.get("/diagnostic", response_class=HTMLResponse)
 async def diagnostic(request: Request, conn=Depends(get_conn)):
     user = require_user(request, conn)
-    ip = _ip(request)
-    try:
-        inbound = any(ipaddress.ip_address(ip) in net for net in TAILNET)
-    except ValueError:
-        inbound = False
-    checks = [("Tailscale entrant", True if inbound else None,
-               f"cette page arrive par Tailscale ({ip})" if inbound
-               else f"cette page n'arrive pas par Tailscale ({ip or 'adresse inconnue'}) : non vérifiable d'ici")]
-    checks += await asyncio.gather(_check("Tailscale sortant", _tailscale_out), _check("API Trophy", _trophy),
+    checks = await asyncio.gather(_check("Tailscale sortant", _tailscale_out), _check("API Trophy", _trophy),
                                    _check("SMSGate (téléphone)", _smsgate))
     return templates.TemplateResponse(request, "diagnostic.html", {"user": user, "checks": checks})

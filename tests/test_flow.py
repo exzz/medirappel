@@ -59,7 +59,7 @@ def test_taken_too_late_and_missed(env, clock):
     fake, conn = env
     clock["now"] = datetime(2026, 11, 9, 10, 0)
     fake.appointments = [appt(1, "2026-11-10T10:00")]  # SMS was due at 09:00 today
-    client = TestClient(scheduler_app())
+    client = TestClient(scheduler_app(), base_url="https://testserver")
     with client:
         login(client)
         client.get("/?day=2026-11-10")
@@ -121,7 +121,7 @@ def test_web_cancel_restore_and_isolation(env, clock, caplog):
     caplog.set_level("INFO")
     fake, conn = env
     fake.appointments = [appt(1, "2026-11-10T10:00")]
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client)
         page = client.get("/?day=2026-11-10")
         assert page.status_code == 200 and "DURAND Paul1" in page.text and "+3361234****" in page.text
@@ -134,7 +134,7 @@ def test_web_cancel_restore_and_isolation(env, clock, caplog):
         assert rows(conn)[1]["status"] == "planned"
         # Timeline greys the holiday and the weekend.
         assert 'class="closed' in page.text
-    with TestClient(scheduler_app()) as other:
+    with TestClient(scheduler_app(), base_url="https://testserver") as other:
         login(other, user_id=2)
         assert other.post(f"/reminder/{rid}/cancel").status_code == 404
     actions = [r["action"] for r in conn.execute("SELECT action FROM journal")]
@@ -146,7 +146,7 @@ def test_web_cancel_restore_and_isolation(env, clock, caplog):
 
 def test_refresh_button_rereads_whole_upcoming_agenda(env, clock):
     fake, conn = env
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client)
         fake.appointments = [appt(1, "2026-11-10T10:00"), appt(2, "2026-11-20T10:00")]
         r = client.post("/refresh", data={"day": "2026-11-10", "practitioner": 2})  # foreign id ignored
@@ -187,7 +187,7 @@ def test_exclude_and_include_patient(env, clock, caplog):
     fake.appointments = [appt(1, "2026-11-10T10:00"), appt(2, "2026-11-12T10:00")]
     for a in fake.appointments:  # same patient, two days
         a["patient"]["id"] = 77
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client)
         client.get("/?day=2026-11-10")
         run(scheduler.plan_and_send(conn))
@@ -211,7 +211,7 @@ def test_assistant_sees_only_her_practitioners(env, clock):
     fake.appointments = [{**appt(1, "2026-11-10T10:00"), "praticien_id": 1},
                          {**appt(2, "2026-11-10T11:00"), "praticien_id": 2}]
     run(scheduler.plan_and_send(conn))
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client, user_id=3)
         page = client.get("/?day=2026-11-10&practitioner=1").text  # not hers: falls back to Dr Autre
         assert "Dr Autre" in page and "Dr Bellec" not in page and 'id="practitioner"' in page
@@ -241,7 +241,7 @@ def test_old_user_table_is_migrated(tmp_path, monkeypatch):
 def test_free_message(env, clock, caplog):
     caplog.set_level("INFO")
     fake, conn = env
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client)
         assert "Envoyer un message" in client.get("/?day=2026-11-10").text
         r = client.post("/message", data={"phone": "01 23 45 67 89", "text": "Bonjour"})
@@ -265,7 +265,7 @@ def test_patient_picker_full_then_first_page(env, clock, monkeypatch):
     calls = fake.calls
     run(trophy.refresh_patients())  # cached: first page only
     assert fake.calls == calls + 1
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client)
         hits = client.post("/message/patients", data={"q": "martin lea"}).json()
         assert [h["phone"] for h in hits] == ["0611223344", None]
@@ -280,7 +280,7 @@ def test_diagnostic(env, clock, monkeypatch):
     monkeypatch.setattr(main, "_tailscale_out", no_tailnet)
     monkeypatch.setattr(smsgate, "transport", httpx.MockTransport(
         lambda r: httpx.Response(200, json={"status": "pass"}) if r.url.path == "/health" else httpx.Response(404)))
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client)
         assert 'href="/diagnostic"' in client.get("/message").text
         html = client.get("/diagnostic").text
@@ -307,7 +307,7 @@ def test_carddav_book_per_practitioner(env, clock):
     auth_ok = ("telephone", "changer-moi")  # settings.example.json
     pat = lambda i, prat, mobile: {"id": i, "nom": "Durand", "prenom": f"Zoé{i}", "naissance": None,  # noqa: E731
                                    "mobile": mobile, "tel": "", "praticien_id": prat}
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         dav = lambda m, path, **kw: client.request(m, path, auth=kw.pop("auth", auth_ok), **kw)  # noqa: E731
         assert dav("PROPFIND", "/carddav/1/").status_code == 503  # empty cache: never an empty book
         fake.patients = [pat(1, 1, "06 11 22 33 44"), pat(2, 1, "01 23 45 67 89"), pat(3, 2, "0612345678")]
@@ -333,7 +333,7 @@ def test_retry_refused_once_the_appointment_is_past(env, clock):
     conn.execute("UPDATE reminder SET status = 'failed'")
     rid = rows(conn)[1]["id"]
     clock["now"] = datetime(2026, 11, 10, 11, 0)  # appointment over
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         login(client)
         assert "Relancer" not in client.get("/?day=2026-11-10").text
         client.post(f"/reminder/{rid}/retry")
@@ -380,7 +380,7 @@ def test_no_phone_number_in_logs_and_healthcheck_dropped(env, clock, caplog):
 
 
 def test_installable_web_app(env, clock):
-    with TestClient(scheduler_app()) as client:
+    with TestClient(scheduler_app(), base_url="https://testserver") as client:
         page = client.get("/login").text
         assert '<link rel="manifest" href="/static/manifest.json">' in page and '<small class="ver">dev</small>' in page
         m = client.get("/static/manifest.json").json()

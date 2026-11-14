@@ -321,8 +321,7 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
   récents d'abord) et la fusionne. La recherche ne lit que le cache, en `POST` (un nom dans l'URL finirait dans les logs d'accès).
 - Lien **« Diagnostic »** en pied de page (simple lien, demande de l'utilisateur) : page
   `/diagnostic`, une ligne par service, ✓ vert, ✗ rouge avec la raison, ou « – » si non
-  vérifiable : Tailscale entrant (la page arrive-t-elle d'une adresse 100.64.0.0/10 ou fd7a:115c:a1e0::/48),
-  Tailscale sortant (`100.100.100.100:53` qui répond, sans commande `tailscale` : Tailscale
+  vérifiable : Tailscale sortant (`100.100.100.100:53` qui répond, sans commande `tailscale` : Tailscale
   tourne sur l'hôte et les conteneurs joignent le tailnet par son routage), API Trophy (vraie requête
   `/holidays` du jour, hors cache), SMSGate (`GET /health`, sans envoi). Tous les rôles.
 - **Carnets de contacts** (demande de l'utilisateur, 2026-11-08) : pour le téléphone SMSGate, qui
@@ -436,6 +435,10 @@ Déploiement : comme `../trophy`, `Dockerfile` seul, **pas de compose dans ce d�
 Le compose commun (Trophy, Sterilog, MediRappel) vit dans **`/srv/compose/cabinet`**, avec son README :
 il ne construit rien, il prend les versions dans son `.env`. Tailscale tourne **sur l'hôte** : entrée par
 `tailscale serve` vers `127.0.0.1:8222`, publié en **https://medirappel.tail6b1de5.ts.net** (port 443), sortie par le routage de l'hôte ; l'API Trophy y est `http://trophy:8333`.
+Sur le réseau du cabinet : **https://medirappel.med.lan** par Caddy (`/srv/compose/caddy`, certificat ACME de 24 h
+du step-ca interne `/srv/compose/smallstep`), branché sur le réseau du compose, donc dans `FORWARDED_ALLOW_IPS` ;
+Caddy écrase tout `X-Forwarded-For` venu du poste. Toutes les entrées étant en HTTPS, le cookie de session est `Secure`
+(les tests passent par `https://testserver`).
 Image Ubuntu + venv uv, `TZ=Europe/Paris`, port 8222, utilisateur `app_medirappel` **uid:gid 10012:10012**
 (le même uid que sur l'hôte, propriétaire de `medirappel/config` et `medirappel/data`), `/data` en volume,
 configuration montée en lecture seule dans `/config` (`MEDIRAPPEL_*`), système de fichiers en lecture seule,
