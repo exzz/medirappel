@@ -427,6 +427,8 @@ tests/             faux Trophy (httpx.MockTransport), horloge figée, SMSGate en
 
 Lancer : `uv run uvicorn app.main:app` (un seul processus). Tests : `uv run pytest`.
 `MEDIRAPPEL_NO_SCHEDULER=1` coupe l'ordonnanceur (tests).
+`MEDIRAPPEL_INSECURE_COOKIE=1` retire `Secure` du cookie de session, pour un essai en HTTP hors `localhost`
+(développement seulement, jamais dans l'image ; avertissement au démarrage). Sur `http://localhost`, inutile.
 
 Tables : `user`, `session`, `api_cache`, `reminder`, `optout` (un SMS par rendez-vous Trophy),
 `journal`. Heures locales `AAAA-MM-JJTHH:MM` dans `reminder`, UTC dans `journal`.

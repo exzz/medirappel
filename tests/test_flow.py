@@ -387,4 +387,15 @@ def test_installable_web_app(env, clock):
         assert m["display"] == "standalone" and m["start_url"] == "/"
         for icon in m["icons"]:  # Android needs 192 and 512, all reachable
             assert client.get(icon["src"]).status_code == 200
+        assert client.get("/favicon.ico").headers["content-type"] == "image/png"
         assert {i["sizes"] for i in m["icons"]} >= {"192x192", "512x512"}
+
+
+def test_session_cookie_secure_unless_dev_switch(env, clock, monkeypatch):
+    def set_cookie():
+        with TestClient(scheduler_app(), base_url="https://testserver") as client:
+            r = client.post("/login", data={"user_id": 1, "pin": "123456"}, follow_redirects=False)
+            return r.headers["set-cookie"].lower()
+    assert "; secure" in set_cookie()
+    monkeypatch.setenv("MEDIRAPPEL_INSECURE_COOKIE", "1")
+    assert "; secure" not in set_cookie()

@@ -16,7 +16,7 @@ from datetime import date, timedelta
 
 import httpx
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -26,6 +26,11 @@ from .planner import iso, mask
 
 log = logging.getLogger(__name__)
 COOKIE = "medirappel_session"
+
+
+def insecure_cookie() -> bool:
+    """Dev only, never set in the image: lets the session cookie travel over plain HTTP."""
+    return os.environ.get("MEDIRAPPEL_INSECURE_COOKIE") == "1"
 
 STATUS = {  # label, css class
     "planned": ("Planifié", "wait"),
@@ -93,6 +98,8 @@ async def lifespan(app: FastAPI):
         log.warning("sms_template renders to %d chars (> 160): it will cost 2 SMS", len(sample))
     if not config.settings()["auto_send"]:
         log.warning("auto_send is false: planned SMS are NOT sent automatically")
+    if insecure_cookie():
+        log.warning("MEDIRAPPEL_INSECURE_COOKIE=1: session cookie sent over plain HTTP (dev only)")
     tasks = [] if os.environ.get("MEDIRAPPEL_NO_SCHEDULER") else [
         asyncio.create_task(scheduler.run()), asyncio.create_task(_health_loop())]
     yield
@@ -103,6 +110,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(carddav.router)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():  # browsers ask for it on their own, outside the <link> of the pages
+    return FileResponse(BASE_DIR / "static" / "favicon.png", media_type="image/png")
+
+
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.globals.update(version=os.environ.get("MEDIRAPPEL_VERSION", "dev"), css_v=int((BASE_DIR / "static" / "app.css").stat().st_mtime), status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
 
@@ -171,7 +185,7 @@ def login(request: Request, user_id: int = Form(...), pin: str = Form(...), conn
     auth.give_back_ip_try(_ip(request))
     resp = RedirectResponse("/", status_code=303)
     resp.set_cookie(COOKIE, auth.open_session(conn, user["id"]), httponly=True, samesite="strict",
-                    secure=True, max_age=12 * 3600)  # every entry point is HTTPS (tailscale serve, Caddy)
+                    secure=not insecure_cookie(), max_age=12 * 3600)  # every entry point is HTTPS (tailscale serve, Caddy)
     return resp
 
 
