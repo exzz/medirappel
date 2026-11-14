@@ -15,7 +15,7 @@
   <div class="wrap">
     <a href="/" class="brand"><img src="/static/favicon.png" alt="" width="30" height="30">MediRappel<small class="ver">{{ version }}</small></a>
     {% if user %}
-    <span class="who">{{ user['name'] }}</span>
+    <span class="who"><strong>{{ user['name'] }}</strong> · {{ roles[user['role']] }}</span>
     <form method="post" action="/logout" class="logout"><button type="submit">Se déconnecter</button></form>
     {% endif %}
   </div>

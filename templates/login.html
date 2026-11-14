@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Connexion — MediRappel{% endblock %}
 {% block body %}
-<main class="wrap narrow">
+<main class="wrap narrow login">
   <h1>Connexion</h1>
   <p class="sub">Choisissez votre nom, puis composez votre code.</p>
   {% if error %}<p class="notice bad">{{ error }}</p>{% endif %}
@@ -9,7 +9,8 @@
   <form method="post" action="/login" id="form">
     <div class="accounts">
       {% for a in accounts %}
-      <button type="button" class="account" data-id="{{ a['id'] }}" aria-pressed="false">{{ a['name'] }}</button>
+      <button type="button" class="account" data-id="{{ a['id'] }}" aria-pressed="false">
+        <span class="initials" aria-hidden="true">{{ a['initials'] }}</span><span class="name">{{ a['name'] }}</span><span class="role">{{ roles[a['role']] }}</span></button>
       {% endfor %}
     </div>
     <div id="pin-step" hidden>
@@ -37,7 +38,7 @@ document.querySelectorAll('.account').forEach(b => b.addEventListener('click', (
   document.querySelectorAll('.account').forEach(x => x.setAttribute('aria-pressed', 'false'));
   b.setAttribute('aria-pressed', 'true');
   document.getElementById('user_id').value = b.dataset.id;
-  document.getElementById('prompt').textContent = 'Code de ' + b.textContent;
+  document.getElementById('prompt').textContent = 'Code de ' + b.querySelector('.name').textContent;
   step.hidden = false; code = ''; draw();
 }));
 document.querySelectorAll('[data-digit]').forEach(k => k.addEventListener('click', () => {

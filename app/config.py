@@ -102,7 +102,7 @@ def users() -> list[dict]:
     seen = set()
     for n, u in enumerate(data, 1):
         # Never echo the entry: it holds the PIN hash.
-        missing = [k for k in ("login", "name", "role", "pin_hash", "pin_salt") if not u.get(k)]
+        missing = [k for k in ("login", "name", "initials", "role", "pin_hash", "pin_salt") if not u.get(k)]
         if missing:
             raise ConfigError(f"users.json: entry {n} lacks {', '.join(missing)}.")
         if u["role"] not in ("practitioner", "assistant", "admin"):

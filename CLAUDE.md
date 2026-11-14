@@ -272,6 +272,9 @@ RDV avec {practitioner} le {date} a {time}, {practice}, {address}. Si empechemen
 - `users.json` (jamais versionné, modèle `users.example.json`) : un compte par
   praticien, PIN haché en PBKDF2, sessions, verrouillage après plusieurs échecs.
   Reprendre `app/auth.py` de Sterilog.
+- Page de connexion comme Sterilog (demande de l'utilisateur) : un bouton par compte avec ses
+  **initiales** (`initials`, obligatoire dans `users.json`) dans une pastille couleur du bandeau, le nom,
+  et le rôle à droite.
 - Rôle `practitioner` : lié à son `trophy_practitioner_id`, il ne voit **que ses
   rendez-vous**.
 - Rôle `assistant` (assistante) : `trophy_practitioner_ids`, liste d'identifiants Trophy.

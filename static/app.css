@@ -44,15 +44,17 @@ code { font-size: .9em; }
 
 /* ---------------------------------------------------------------- header */
 .bar { background: var(--primary-dark); color: #fff; padding: .75rem 0; }
-.bar .wrap { display: flex; align-items: center; gap: .75rem; }
+.bar + main { margin-top: 1.25rem; }  /* as in Sterilog; the planning timeline stays glued to the bar */
+.bar .wrap { display: flex; align-items: center; gap: .75rem; min-height: 2.1rem; }  /* = .btn: same bar with or without the logout button */
 .brand { color: #fff; text-decoration: none; font-weight: 650; font-size: var(--t-section);
          display: inline-flex; align-items: center; gap: .45rem; }
 .brand img { display: block; }
 .brand .ver { font-size: var(--t-detail); font-weight: 400; opacity: .7; align-self: flex-end; margin-bottom: .2rem; }
 .who { margin-left: auto; font-size: var(--t-detail); opacity: .9; min-width: 0;
        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who strong { font-weight: 600; }  /* as in Sterilog */
 .logout { margin: 0; flex-shrink: 0; }
-.logout button { min-height: 2.75rem; padding: .3rem .7rem; font: inherit; font-size: var(--t-detail);
+.logout button { min-height: 2.1rem; padding: .2rem .7rem; font: inherit; font-size: var(--t-detail);
                  color: #fff; background: transparent; border: 1px solid rgba(255,255,255,.6);
                  border-radius: var(--r); cursor: pointer; }
 
@@ -176,9 +178,13 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* ------------------------------------------------------------ PIN pad */
 .accounts { display: grid; gap: .5rem; margin-bottom: 1.5rem; }
-.account { min-height: var(--target); padding: .6rem .9rem; font: inherit; text-align: left; cursor: pointer;
+.wrap.login { max-width: 34rem; }  /* as in Sterilog */
+.account { display: flex; align-items: center; gap: .75rem; min-height: var(--target); padding: .6rem .9rem; font: inherit; text-align: left; cursor: pointer;
            background: var(--paper); border: 1px solid var(--line); border-radius: var(--r); color: var(--ink); }
 .account[aria-pressed="true"] { border-color: var(--primary-dark); background: var(--primary-light); }
+.account .initials { display: grid; place-items: center; flex: none; width: 2.25rem; height: 2.25rem; border-radius: 50%;
+                     background: var(--primary-dark); color: #fff; font-size: var(--t-detail); font-weight: 600; }  /* = the bar */
+.account .role { margin-left: auto; font-size: var(--t-detail); color: var(--muted); }
 .dots { display: flex; justify-content: center; gap: .7rem; margin: 1.5rem 0; }
 .dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
 .dot.on { background: var(--primary-dark); border-color: var(--primary-dark); }

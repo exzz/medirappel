@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS user (
     id              INTEGER PRIMARY KEY,
     login           TEXT    NOT NULL UNIQUE,
     name            TEXT    NOT NULL,
+    initials        TEXT    NOT NULL DEFAULT '',  -- login page badge
     role            TEXT    NOT NULL CHECK (role IN ('practitioner', 'assistant', 'admin')),
     practitioner_id INTEGER,              -- Trophy NUM_PRATICIEN (practitioner)
     practitioner_ids TEXT,                -- JSON list of NUM_PRATICIEN (assistant)
@@ -111,5 +112,7 @@ def init_db() -> None:
                                " pin_hash, pin_salt, active, attempts, locked_until FROM user;"
                                " DROP TABLE user; ALTER TABLE user_new RENAME TO user; COMMIT;")
         conn.executescript(SCHEMA)
+        if "initials" not in {r[1] for r in conn.execute("PRAGMA table_info(user)")}:
+            conn.execute("ALTER TABLE user ADD COLUMN initials TEXT NOT NULL DEFAULT ''")
     finally:
         conn.close()

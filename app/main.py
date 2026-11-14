@@ -118,7 +118,8 @@ def favicon():  # browsers ask for it on their own, outside the <link> of the pa
 
 
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
-templates.env.globals.update(version=os.environ.get("MEDIRAPPEL_VERSION", "dev"), css_v=int((BASE_DIR / "static" / "app.css").stat().st_mtime), status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
+ROLES = {"practitioner": "Praticien(ne)", "assistant": "Assistant(e)", "admin": "Administrateur"}
+templates.env.globals.update(roles=ROLES, version=os.environ.get("MEDIRAPPEL_VERSION", "dev"), css_v=int((BASE_DIR / "static" / "app.css").stat().st_mtime), status=STATUS, mask=mask, late=planner.LATE, excluded=planner.EXCLUDED)
 
 
 @app.middleware("http")
@@ -160,7 +161,7 @@ async def http_error(request: Request, exc: HTTPException):
 # ------------------------------------------------------------------ login
 
 def _accounts(conn):
-    return conn.execute("SELECT id, name, role FROM user WHERE active = 1 ORDER BY name").fetchall()
+    return conn.execute("SELECT id, name, initials, role FROM user WHERE active = 1 ORDER BY name").fetchall()
 
 
 def _ip(request: Request) -> str:

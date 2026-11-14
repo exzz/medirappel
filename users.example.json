@@ -3,6 +3,7 @@
     {
       "login": "antoine-bellec",
       "name": "Dr Antoine Bellec",
+      "initials": "AB",
       "role": "practitioner",
       "trophy_practitioner_id": 1,
       "pin_hash": "remplacer: python medirappel.py hash-pin",
@@ -11,6 +12,7 @@
     {
       "login": "assistante-julie",
       "name": "Julie (assistante)",
+      "initials": "J",
       "role": "assistant",
       "trophy_practitioner_ids": [1, 2],
       "pin_hash": "remplacer",
@@ -19,6 +21,7 @@
     {
       "login": "secretariat",
       "name": "Secrétariat",
+      "initials": "S",
       "role": "admin",
       "pin_hash": "remplacer",
       "pin_salt": "remplacer"

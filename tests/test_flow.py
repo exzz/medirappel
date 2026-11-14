@@ -125,6 +125,7 @@ def test_web_cancel_restore_and_isolation(env, clock, caplog):
         login(client)
         page = client.get("/?day=2026-11-10")
         assert page.status_code == 200 and "DURAND Paul1" in page.text and "+3361234****" in page.text
+        assert "<strong>Dr Bellec</strong> · Praticien(ne)" in page.text
         rid = rows(conn)[1]["id"]
         client.post(f"/reminder/{rid}/cancel")
         assert rows(conn)[1]["status"] == "cancelled"
@@ -234,7 +235,7 @@ def test_old_user_table_is_migrated(tmp_path, monkeypatch):
     old.commit(); old.close()
     db.init_db()
     conn = db.connect()
-    assert conn.execute("SELECT id FROM user WHERE login = 'a'").fetchone()[0] == 7
+    assert tuple(conn.execute("SELECT id, initials FROM user WHERE login = 'a'").fetchone()) == (7, '')
     conn.execute("INSERT INTO user (login, name, role, pin_hash, pin_salt) VALUES ('b', 'B', 'assistant', 'h', 's')")
 
 
@@ -383,6 +384,7 @@ def test_installable_web_app(env, clock):
     with TestClient(scheduler_app(), base_url="https://testserver") as client:
         page = client.get("/login").text
         assert '<link rel="manifest" href="/static/manifest.json">' in page and '<small class="ver">dev</small>' in page
+        assert '<span class="initials" aria-hidden="true">DA</span><span class="name">Dr Autre</span>' in page
         m = client.get("/static/manifest.json").json()
         assert m["display"] == "standalone" and m["start_url"] == "/"
         for icon in m["icons"]:  # Android needs 192 and 512, all reachable
@@ -399,3 +401,15 @@ def test_session_cookie_secure_unless_dev_switch(env, clock, monkeypatch):
     assert "; secure" in set_cookie()
     monkeypatch.setenv("MEDIRAPPEL_INSECURE_COOKIE", "1")
     assert "; secure" not in set_cookie()
+
+
+def test_user_table_gets_initials_column(tmp_path, monkeypatch):
+    import sqlite3
+    from app import db
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "v1.db")
+    old = sqlite3.connect(tmp_path / "v1.db")  # 1.0.x schema: no initials column
+    old.executescript("\n".join(l for l in db.SCHEMA.splitlines() if "initials" not in l))
+    old.execute("INSERT INTO user (login, name, role, pin_hash, pin_salt) VALUES ('a', 'A', 'admin', 'h', 's')")
+    old.commit(); old.close()
+    db.init_db()
+    assert db.connect().execute("SELECT initials FROM user").fetchone()[0] == ""

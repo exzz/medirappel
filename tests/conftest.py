@@ -64,11 +64,11 @@ def env(tmp_path, monkeypatch, clock):
     settings["trophy"] = {"url": "http://trophy", "api_key": "k"}
     pin_hash, salt = auth.hash_pin("123456")
     users = {"users": [
-        {"login": "bellec", "name": "Dr Bellec", "role": "practitioner", "trophy_practitioner_id": 1,
+        {"login": "bellec", "name": "Dr Bellec", "initials": "B", "role": "practitioner", "trophy_practitioner_id": 1,
          "pin_hash": pin_hash, "pin_salt": salt},
-        {"login": "other", "name": "Dr Autre", "role": "practitioner", "trophy_practitioner_id": 2,
+        {"login": "other", "name": "Dr Autre", "initials": "DA", "role": "practitioner", "trophy_practitioner_id": 2,
          "pin_hash": pin_hash, "pin_salt": salt},
-        {"login": "assist", "name": "Assistante", "role": "assistant", "trophy_practitioner_ids": [2],
+        {"login": "assist", "name": "Assistante", "initials": "As", "role": "assistant", "trophy_practitioner_ids": [2],
          "pin_hash": pin_hash, "pin_salt": salt},
     ]}
     for name, data in (("settings.json", settings), ("users.json", users)):
